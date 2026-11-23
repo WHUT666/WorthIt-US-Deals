@@ -1,17 +1,21 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,6 +40,8 @@ import com.example.viewmodel.DealRadarViewModel
 @Composable
 fun SavedDealsScreen(
     viewModel: DealRadarViewModel,
+    listState: LazyListState = rememberLazyListState(),
+    onExploreDeals: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -48,7 +54,7 @@ fun SavedDealsScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("saved_deals_screen")
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Text(
             text = "Saved Deals (${savedDeals.size})",
@@ -56,12 +62,12 @@ fun SavedDealsScreen(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Persisted locally in Room. Every live sync updates observed prices and snapshots for your saved items.",
+            text = "Persisted locally in Room. Live sync updates observed prices and snapshots for your watchlist.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         if (savedDeals.isEmpty()) {
             Box(
@@ -86,7 +92,7 @@ fun SavedDealsScreen(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "No saved deals yet",
                         style = MaterialTheme.typography.titleMedium,
@@ -98,11 +104,21 @@ fun SavedDealsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onExploreDeals,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("saved_explore_deals_btn")
+                    ) {
+                        Text("Explore Live Deals")
+                    }
                 }
             }
         } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 24.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(savedDeals, key = { it.id }) { deal ->
@@ -113,6 +129,10 @@ fun SavedDealsScreen(
                         onVoteWorth = { viewModel.voteDeal(deal, true) },
                         onVoteNotWorth = { viewModel.voteDeal(deal, false) },
                         onToggleSave = { viewModel.toggleSaveDeal(deal) },
+                        onCopyCoupon = { code ->
+                            copyTextToClipboard(context, "Promo Code", code)
+                            viewModel.recordCouponCopy(code, deal.id, deal.merchant, deal.category)
+                        },
                         onDirectCheckout = {
                             if (userProfile.autoCopyCoupons && deal.coupon != null) {
                                 copyTextToClipboard(context, "Promo Code", deal.coupon.code)
@@ -120,7 +140,8 @@ fun SavedDealsScreen(
                             }
                             viewModel.recordOutboundClick(deal.id, deal.merchant, deal.category)
                             openSafeExternalUrl(context, deal.buyUrl)
-                        }
+                        },
+                        modifier = Modifier.animateItem()
                     )
                 }
             }

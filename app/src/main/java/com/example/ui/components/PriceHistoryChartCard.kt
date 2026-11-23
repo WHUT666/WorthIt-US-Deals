@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +23,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -27,6 +35,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -156,6 +165,14 @@ fun PriceHistoryChartCard(
                     val maxPrice = pricePoints.maxOf { it.price } * 1.04
                     val range = (maxPrice - minPrice).coerceAtLeast(1.0)
 
+                    var chartRevealed by remember(pricePoints) { mutableStateOf(false) }
+                    LaunchedEffect(pricePoints) { chartRevealed = true }
+                    val revealProgress by animateFloatAsState(
+                        targetValue = if (chartRevealed) 1f else 0f,
+                        animationSpec = tween(durationMillis = 560, easing = FastOutSlowInEasing),
+                        label = "priceChartReveal"
+                    )
+
                     Canvas(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -191,30 +208,32 @@ fun PriceHistoryChartCard(
                         fillPath.lineTo(points.last().x, h)
                         fillPath.close()
 
-                        drawPath(
-                            path = fillPath,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(primaryColor.copy(alpha = 0.18f), primaryColor.copy(alpha = 0.0f))
+                        clipRect(right = (w * revealProgress).coerceAtLeast(1f)) {
+                            drawPath(
+                                path = fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(primaryColor.copy(alpha = 0.18f), primaryColor.copy(alpha = 0.0f))
+                                )
                             )
-                        )
-                        drawPath(
-                            path = linePath,
-                            color = primaryColor,
-                            style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-                        )
+                            drawPath(
+                                path = linePath,
+                                color = primaryColor,
+                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                            )
 
-                        points.forEachIndexed { idx, pt ->
-                            val isLatest = idx == points.lastIndex
-                            drawCircle(
-                                color = if (isLatest) ext.success else primaryColor,
-                                radius = if (isLatest) 6.dp.toPx() else 4.dp.toPx(),
-                                center = pt
-                            )
-                            drawCircle(
-                                color = surfaceColor,
-                                radius = if (isLatest) 2.5.dp.toPx() else 1.8.dp.toPx(),
-                                center = pt
-                            )
+                            points.forEachIndexed { idx, pt ->
+                                val isLatest = idx == points.lastIndex
+                                drawCircle(
+                                    color = if (isLatest) ext.success else primaryColor,
+                                    radius = if (isLatest) 6.dp.toPx() else 4.dp.toPx(),
+                                    center = pt
+                                )
+                                drawCircle(
+                                    color = surfaceColor,
+                                    radius = if (isLatest) 2.5.dp.toPx() else 1.8.dp.toPx(),
+                                    center = pt
+                                )
+                            }
                         }
                     }
 

@@ -4,6 +4,13 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,13 +21,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
@@ -33,6 +40,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -49,6 +57,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,6 +77,7 @@ fun AlgorithmProfileScreen(
     modifier: Modifier = Modifier
 ) {
     val ext = WorthItTheme.extendedColors
+    val haptics = LocalHapticFeedback.current
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val funnelStats by viewModel.conversionFunnelStats.collectAsStateWithLifecycle()
     val behaviorAffinity by viewModel.behaviorAffinity.collectAsStateWithLifecycle()
@@ -85,7 +96,55 @@ fun AlgorithmProfileScreen(
 
     var newKeywordInput by remember { mutableStateOf("") }
     var keywordsList by remember(userProfile) { mutableStateOf(userProfile.watchedKeywords) }
-    var showSavedBanner by remember { mutableStateOf(false) }
+
+    val hasUnsavedChanges = selectedCats != userProfile.preferredCategories ||
+        selectedMerchants != userProfile.preferredMerchants ||
+        discountThreshold.toInt() != userProfile.minimumDiscountThreshold ||
+        maxBudget.toInt() != userProfile.maxBudgetUSD.toInt() ||
+        onlyHistoric != userProfile.onlyHistoricLows ||
+        pushEnabled != userProfile.pushNotificationsEnabled ||
+        autoCopyCoupons != userProfile.autoCopyCoupons ||
+        kotlin.math.abs(wDiscount - userProfile.discountWeight) > 0.005f ||
+        kotlin.math.abs(wHistoric - userProfile.historicLowWeight) > 0.005f ||
+        kotlin.math.abs(wSocial - userProfile.socialWorthWeight) > 0.005f ||
+        kotlin.math.abs(wPersonal - userProfile.personalAffinityWeight) > 0.005f ||
+        keywordsList != userProfile.watchedKeywords
+
+    val saveProfileChanges: () -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        viewModel.savePreferences(
+            userProfile.copy(
+                preferredCategories = selectedCats.ifEmpty { setOf(DealCategory.ELECTRONICS) },
+                preferredMerchants = selectedMerchants.ifEmpty { setOf(USMerchant.AMAZON) },
+                minimumDiscountThreshold = discountThreshold.toInt(),
+                onlyHistoricLows = onlyHistoric,
+                maxBudgetUSD = maxBudget.toDouble(),
+                watchedKeywords = keywordsList,
+                pushNotificationsEnabled = pushEnabled,
+                autoCopyCoupons = autoCopyCoupons,
+                discountWeight = wDiscount,
+                historicLowWeight = wHistoric,
+                socialWorthWeight = wSocial,
+                personalAffinityWeight = wPersonal
+            )
+        )
+    }
+
+    val resetLocalChanges: () -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        selectedCats = userProfile.preferredCategories
+        selectedMerchants = userProfile.preferredMerchants
+        discountThreshold = userProfile.minimumDiscountThreshold.toFloat()
+        maxBudget = userProfile.maxBudgetUSD.toFloat()
+        onlyHistoric = userProfile.onlyHistoricLows
+        pushEnabled = userProfile.pushNotificationsEnabled
+        autoCopyCoupons = userProfile.autoCopyCoupons
+        wDiscount = userProfile.discountWeight
+        wHistoric = userProfile.historicLowWeight
+        wSocial = userProfile.socialWorthWeight
+        wPersonal = userProfile.personalAffinityWeight
+        keywordsList = userProfile.watchedKeywords
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -93,13 +152,18 @@ fun AlgorithmProfileScreen(
         pushEnabled = granted
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .testTag("algorithm_profile_screen")
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
         // Apple-style Appearance Switcher Card (Light / Auto / Dark)
         Card(
             shape = RoundedCornerShape(20.dp),
@@ -148,7 +212,10 @@ fun AlgorithmProfileScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(9.dp))
-                                    .clickable { viewModel.setThemeMode(mode) }
+                                    .clickable {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.setThemeMode(mode)
+                                    }
                                     .minimumInteractiveComponentSize()
                                     .testTag("theme_segment_${mode.name.lowercase()}")
                             ) {
@@ -463,54 +530,73 @@ fun AlgorithmProfileScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         Button(
-            onClick = {
-                viewModel.savePreferences(
-                    userProfile.copy(
-                        preferredCategories = selectedCats.ifEmpty { setOf(DealCategory.ELECTRONICS) },
-                        preferredMerchants = selectedMerchants.ifEmpty { setOf(USMerchant.AMAZON) },
-                        minimumDiscountThreshold = discountThreshold.toInt(),
-                        onlyHistoricLows = onlyHistoric,
-                        maxBudgetUSD = maxBudget.toDouble(),
-                        watchedKeywords = keywordsList,
-                        pushNotificationsEnabled = pushEnabled,
-                        autoCopyCoupons = autoCopyCoupons,
-                        discountWeight = wDiscount,
-                        historicLowWeight = wHistoric,
-                        socialWorthWeight = wSocial,
-                        personalAffinityWeight = wPersonal
-                    )
-                )
-                showSavedBanner = true
-            },
+            onClick = saveProfileChanges,
+            enabled = hasUnsavedChanges,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
                 .testTag("save_profile_btn"),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(14.dp)
         ) {
-            Icon(Icons.Default.Check, contentDescription = null)
+            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Save & Recalibrate Algorithm")
+            Text(if (hasUnsavedChanges) "Save & Recalibrate Algorithm" else "All Settings Up to Date")
         }
 
-        if (showSavedBanner) {
-            Spacer(modifier = Modifier.height(10.dp))
+        // Extra bottom space so content scrolls comfortably clear of the floating save bar
+        Spacer(modifier = Modifier.height(if (hasUnsavedChanges) 88.dp else 28.dp))
+        }
+
+        // Floating Sticky Save / Discard Bar whenever edits exist
+        AnimatedVisibility(
+            visible = hasUnsavedChanges,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
+            ) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
             Surface(
-                color = ext.successContainer,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(0.5.dp, ext.hairline),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("floating_save_changes_bar")
             ) {
-                Text(
-                    text = "Saved to DataStore! Feed ranking and push alert rules updated.",
-                    color = ext.success,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(12.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = resetLocalChanges,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(0.38f)
+                    ) {
+                        Text("Discard")
+                    }
+                    Button(
+                        onClick = saveProfileChanges,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(0.62f)
+                            .testTag("floating_save_btn")
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Apply Changes")
+                    }
+                }
             }
         }
-
-        Spacer(modifier = Modifier.height(28.dp))
     }
 }
 

@@ -2,18 +2,33 @@ package com.example.ui.screens
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -28,7 +43,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -45,12 +59,19 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -62,6 +83,8 @@ import com.example.model.FreshnessTier
 import com.example.model.VerificationStatus
 import com.example.ui.components.MerchantBadge
 import com.example.ui.components.PriceHistoryChartCard
+import com.example.ui.components.SpinningSyncIcon
+import com.example.ui.components.springPressScale
 import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.copyTextToClipboard
@@ -79,19 +102,27 @@ fun DealDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val ext = WorthItTheme.extendedColors
     val deal = scoredDeal.deal
     val activePrice = deal.effectiveCurrentPrice
 
     val priceHistory by viewModel.selectedDealPriceHistory.collectAsStateWithLifecycle()
-    val copiedToast by viewModel.copiedCouponToast.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val verifyingDealIds by viewModel.verifyingDealIds.collectAsStateWithLifecycle()
     val isVerifying = verifyingDealIds.contains(deal.id)
 
+    val buyCtaInteraction = remember { MutableInteractionSource() }
+    val saveScale by animateFloatAsState(
+        targetValue = if (deal.isSaved) 1.15f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "detailSaveScale"
+    )
+
     BackHandler { onBack() }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Column {
@@ -104,24 +135,39 @@ fun DealDetailScreen(
                     ),
                     title = { Text(deal.brand, maxLines = 1, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
-                        IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_btn")) {
+                        IconButton(
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onBack()
+                            },
+                            modifier = Modifier.testTag("detail_back_btn")
+                        ) {
                             Icon(WorthItIcons.BackChevron, contentDescription = "Back", modifier = Modifier.size(22.dp))
                         }
                     },
                     actions = {
                         IconButton(
-                            onClick = { viewModel.toggleSaveDeal(deal) },
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.toggleSaveDeal(deal)
+                            },
                             modifier = Modifier.testTag("detail_save_btn")
                         ) {
                             Icon(
                                 imageVector = if (deal.isSaved) WorthItIcons.BookmarkFilled else WorthItIcons.BookmarkOutlined,
                                 contentDescription = "Save deal",
                                 tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(21.dp)
+                                modifier = Modifier
+                                    .size(21.dp)
+                                    .graphicsLayer {
+                                        scaleX = saveScale
+                                        scaleY = saveScale
+                                    }
                             )
                         }
                         IconButton(
                             onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 val pricePart = activePrice?.let { " for ${formatMoney(it)}" } ?: ""
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                     putExtra(Intent.EXTRA_TEXT, "${deal.title}$pricePart at ${deal.merchant.displayName}: ${deal.buyUrl}")
@@ -150,7 +196,7 @@ fun DealDetailScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                             .navigationBarsPadding(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -170,29 +216,32 @@ fun DealDetailScreen(
                             )
                         }
 
-                    Button(
-                        onClick = {
-                            if (userProfile.autoCopyCoupons && deal.coupon != null) {
-                                copyTextToClipboard(context, "Promo Code", deal.coupon.code)
-                                viewModel.recordCouponCopy(deal.coupon.code, deal.id, deal.merchant, deal.category)
-                            }
-                            viewModel.recordOutboundClick(deal.id, deal.merchant, deal.category)
-                            openSafeExternalUrl(context, deal.buyUrl)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-                        modifier = Modifier
-                            .minimumInteractiveComponentSize()
-                            .testTag("detail_buy_now_btn")
-                    ) {
-                        Text(
-                            text = "Open ${deal.merchant.displayName}",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(WorthItIcons.ArrowUpRight, contentDescription = null, modifier = Modifier.size(16.dp))
-                    }
+                        Button(
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (userProfile.autoCopyCoupons && deal.coupon != null) {
+                                    copyTextToClipboard(context, "Promo Code", deal.coupon.code)
+                                    viewModel.recordCouponCopy(deal.coupon.code, deal.id, deal.merchant, deal.category)
+                                }
+                                viewModel.recordOutboundClick(deal.id, deal.merchant, deal.category)
+                                openSafeExternalUrl(context, deal.buyUrl)
+                            },
+                            interactionSource = buyCtaInteraction,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                            modifier = Modifier
+                                .springPressScale(buyCtaInteraction, pressedScale = 0.96f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("detail_buy_now_btn")
+                        ) {
+                            Text(
+                                text = "Open ${deal.merchant.displayName}",
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(WorthItIcons.ArrowUpRight, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
             }
@@ -203,44 +252,26 @@ fun DealDetailScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
                 .testTag("deal_detail_content")
         ) {
-            if (copiedToast != null) {
-                Surface(
-                    color = ext.success,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Promo code $copiedToast copied to clipboard!",
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
-            }
-
             if (!deal.imageUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = deal.imageUrl,
-                    contentDescription = deal.title,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(190.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(8.dp)
-                )
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(0.5.dp, ext.hairline),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AsyncImage(
+                        model = deal.imageUrl,
+                        contentDescription = deal.title,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(176.dp)
+                            .padding(10.dp)
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -287,7 +318,7 @@ fun DealDetailScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = deal.title,
@@ -297,13 +328,16 @@ fun DealDetailScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Real-Time Stock & Price Verification Card
+            // Real-Time Stock & Price Verification Card (with animated state colors & spinning refresh)
             LiveVerificationBannerCard(
                 status = deal.verificationStatus,
                 note = deal.verificationNote,
                 verifiedAtMillis = deal.verifiedAtMillis,
                 isVerifying = isVerifying,
-                onReverify = { viewModel.verifyDealLiveNow(deal, force = true) }
+                onReverify = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    viewModel.verifyDealLiveNow(deal, force = true)
+                }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -406,6 +440,7 @@ fun DealDetailScreen(
                                 }
                                 TextButton(
                                     onClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                         copyTextToClipboard(context, "Promo Code", deal.coupon.code)
                                         viewModel.recordCouponCopy(deal.coupon.code, deal.id, deal.merchant, deal.category)
                                     }
@@ -420,18 +455,30 @@ fun DealDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Worth vs Not Worth Community Voting
+            // Worth vs Pass Community Voting with smooth animated states
+            val worthContainer by animateColorAsState(
+                targetValue = if (deal.userVote == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                animationSpec = tween(180),
+                label = "detailWorthBg"
+            )
+            val passContainer by animateColorAsState(
+                targetValue = if (deal.userVote == false) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface,
+                animationSpec = tween(180),
+                label = "detailPassBg"
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 FilledTonalButton(
-                    onClick = { viewModel.voteDeal(deal, true) },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (deal.userVote == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                    ),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.voteDeal(deal, true)
+                    },
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = worthContainer),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -445,14 +492,24 @@ fun DealDetailScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Worth (${deal.worthVotes})")
+                    AnimatedContent(
+                        targetState = deal.worthVotes,
+                        transitionSpec = {
+                            (slideInVertically { -it / 2 } + fadeIn(tween(140))) togetherWith
+                                (slideOutVertically { it / 2 } + fadeOut(tween(120)))
+                        },
+                        label = "detailWorthAnim"
+                    ) { count ->
+                        Text("Worth ($count)")
+                    }
                 }
 
                 FilledTonalButton(
-                    onClick = { viewModel.voteDeal(deal, false) },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (deal.userVote == false) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface
-                    ),
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        viewModel.voteDeal(deal, false)
+                    },
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = passContainer),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
@@ -466,11 +523,20 @@ fun DealDetailScreen(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Pass (${deal.notWorthVotes})")
+                    AnimatedContent(
+                        targetState = deal.notWorthVotes,
+                        transitionSpec = {
+                            (slideInVertically { it / 2 } + fadeIn(tween(140))) togetherWith
+                                (slideOutVertically { -it / 2 } + fadeOut(tween(120)))
+                        },
+                        label = "detailPassAnim"
+                    ) { count ->
+                        Text("Pass ($count)")
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Real Observed Price History Chart from Room Snapshots
             PriceHistoryChartCard(
@@ -479,9 +545,9 @@ fun DealDetailScreen(
                 currentPrice = activePrice
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Transparent DealRank 6-Factor Breakdown Card
+            // Transparent DealRank 6-Factor Breakdown Card with smooth animated progress bars
             val bd = scoredDeal.recommendationReason.breakdown
             Card(
                 shape = RoundedCornerShape(20.dp),
@@ -507,22 +573,23 @@ fun DealDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    ScoreFactorBar("Discount Depth", bd.discountScore)
-                    ScoreFactorBar("Observed Historic Low", bd.historicLowScore)
-                    ScoreFactorBar("Community Social Trust", bd.socialScore)
-                    ScoreFactorBar("Personal & Learned Affinity", bd.personalAndBehaviorScore)
-                    ScoreFactorBar("Merchant & Coupon Value", bd.merchantScore)
-                    ScoreFactorBar("Time Freshness", bd.freshnessScore)
+                    ScoreFactorBar("Discount Depth", bd.discountScore, deal.id)
+                    ScoreFactorBar("Observed Historic Low", bd.historicLowScore, deal.id)
+                    ScoreFactorBar("Community Social Trust", bd.socialScore, deal.id)
+                    ScoreFactorBar("Personal & Learned Affinity", bd.personalAndBehaviorScore, deal.id)
+                    ScoreFactorBar("Merchant & Coupon Value", bd.merchantScore, deal.id)
+                    ScoreFactorBar("Time Freshness", bd.freshnessScore, deal.id)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Live Source Summary & Community Thread Link
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                border = BorderStroke(0.5.dp, ext.hairline),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -541,6 +608,7 @@ fun DealDetailScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedButton(
                             onClick = { openSafeExternalUrl(context, deal.sourceUrl) },
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Outlined.Forum, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -565,20 +633,22 @@ private fun LiveVerificationBannerCard(
     onReverify: () -> Unit
 ) {
     val ext = WorthItTheme.extendedColors
-    val containerColor = when {
+    val targetContainer = when {
         isVerifying -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
         status == VerificationStatus.VERIFIED_LIVE -> ext.successContainer
         status == VerificationStatus.PRICE_INCREASED -> ext.warningContainer
         status == VerificationStatus.OUT_OF_STOCK -> MaterialTheme.colorScheme.errorContainer
         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
     }
-    val contentTint = when {
+    val targetTint = when {
         isVerifying -> MaterialTheme.colorScheme.primary
         status == VerificationStatus.VERIFIED_LIVE -> ext.success
         status == VerificationStatus.PRICE_INCREASED -> ext.warning
         status == VerificationStatus.OUT_OF_STOCK -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val containerColor by animateColorAsState(targetContainer, tween(260), label = "verifyBg")
+    val contentTint by animateColorAsState(targetTint, tween(260), label = "verifyTint")
     val icon = when (status) {
         VerificationStatus.VERIFIED_LIVE -> WorthItIcons.VerifiedShield
         VerificationStatus.PRICE_INCREASED -> Icons.Default.Warning
@@ -605,10 +675,11 @@ private fun LiveVerificationBannerCard(
                 modifier = Modifier.weight(1f)
             ) {
                 if (isVerifying) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = contentTint
+                    SpinningSyncIcon(
+                        isSyncing = true,
+                        tint = contentTint,
+                        contentDescription = "Checking live stock",
+                        size = 19.dp
                     )
                 } else {
                     Icon(
@@ -652,10 +723,11 @@ private fun LiveVerificationBannerCard(
                     .minimumInteractiveComponentSize()
                     .testTag("reverify_deal_btn")
             ) {
-                Icon(
-                    imageVector = WorthItIcons.SyncRefresh,
+                SpinningSyncIcon(
+                    isSyncing = isVerifying,
+                    tint = MaterialTheme.colorScheme.primary,
                     contentDescription = "Re-verify deal",
-                    modifier = Modifier.size(15.dp)
+                    size = 15.dp
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Re-check", style = MaterialTheme.typography.labelMedium)
@@ -665,7 +737,14 @@ private fun LiveVerificationBannerCard(
 }
 
 @Composable
-private fun ScoreFactorBar(label: String, score: Int) {
+private fun ScoreFactorBar(label: String, score: Int, animKey: String) {
+    var revealed by remember(animKey) { mutableStateOf(false) }
+    LaunchedEffect(animKey) { revealed = true }
+    val animatedProgress by animateFloatAsState(
+        targetValue = if (revealed) (score / 100f).coerceIn(0f, 1f) else 0f,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "scoreBar_$label"
+    )
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -681,7 +760,7 @@ private fun ScoreFactorBar(label: String, score: Int) {
         }
         Spacer(modifier = Modifier.height(3.dp))
         LinearProgressIndicator(
-            progress = { (score / 100f).coerceIn(0f, 1f) },
+            progress = { animatedProgress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(6.dp)

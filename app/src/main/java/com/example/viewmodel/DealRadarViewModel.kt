@@ -43,6 +43,13 @@ data class AlertBanner(
     val dealId: String? = null
 )
 
+data class UiFeedbackToast(
+    val id: Long = System.currentTimeMillis(),
+    val message: String,
+    val actionLabel: String? = null,
+    val undoDealId: String? = null
+)
+
 private data class FeedFilterState(
     val category: DealCategory,
     val query: String,
@@ -84,6 +91,9 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _copiedCouponToast = MutableStateFlow<String?>(null)
     val copiedCouponToast: StateFlow<String?> = _copiedCouponToast.asStateFlow()
+
+    private val _uiFeedbackToast = MutableStateFlow<UiFeedbackToast?>(null)
+    val uiFeedbackToast: StateFlow<UiFeedbackToast?> = _uiFeedbackToast.asStateFlow()
 
     // Live Multi-Platform Search state (Stale-While-Revalidate streaming)
     private val _platformSearchQuery = MutableStateFlow("")
@@ -164,6 +174,7 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var searchJob: Job? = null
     private var syncJob: Job? = null
+    private var toastJob: Job? = null
 
     init {
         syncLiveDealsNow()
@@ -289,10 +300,45 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun toggleSaveDeal(deal: DealItem) {
+    fun toggleSaveDeal(deal: DealItem, showFeedback: Boolean = true) {
+        val wasSaved = deal.isSaved
         viewModelScope.launch {
             repository.toggleSaveDeal(deal)
+            if (showFeedback) {
+                showUiToast(
+                    message = if (wasSaved) "Removed from Saved Deals" else "Saved to your watchlist",
+                    actionLabel = "Undo",
+                    undoDealId = deal.id
+                )
+            }
         }
+    }
+
+    fun undoLastBookmarkToggle(dealId: String) {
+        val currentDeal = allDeals.value.firstOrNull { it.id == dealId } ?: return
+        dismissUiToast()
+        toggleSaveDeal(currentDeal, showFeedback = false)
+    }
+
+    fun showUiToast(message: String, actionLabel: String? = null, undoDealId: String? = null) {
+        toastJob?.cancel()
+        val toast = UiFeedbackToast(
+            message = message,
+            actionLabel = actionLabel,
+            undoDealId = undoDealId
+        )
+        _uiFeedbackToast.value = toast
+        toastJob = viewModelScope.launch {
+            delay(3200L)
+            if (_uiFeedbackToast.value?.id == toast.id) {
+                _uiFeedbackToast.value = null
+            }
+        }
+    }
+
+    fun dismissUiToast() {
+        toastJob?.cancel()
+        _uiFeedbackToast.value = null
     }
 
     fun recordOutboundClick(dealId: String, merchant: USMerchant, category: DealCategory) {
@@ -303,6 +349,7 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun recordCouponCopy(code: String, dealId: String, merchant: USMerchant, category: DealCategory) {
         _copiedCouponToast.value = code
+        showUiToast("Promo code $code copied — ready to paste at checkout")
         viewModelScope.launch {
             repository.logConversionEvent(dealId, merchant, category, "COUPON_COPY")
             delay(3000)
@@ -382,6 +429,7 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
     fun savePreferences(updated: UserPreferenceProfile) {
         viewModelScope.launch {
             repository.saveUserProfile(updated)
+            showUiToast("Algorithm & alert preferences updated")
         }
     }
 
@@ -398,6 +446,7 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
     fun resetBehavioralLearning() {
         viewModelScope.launch {
             repository.resetBehavioralLearning()
+            showUiToast("Behavioral learning weights reset")
         }
     }
 

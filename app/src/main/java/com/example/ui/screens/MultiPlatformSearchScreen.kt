@@ -14,18 +14,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,42 +31,52 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.network.LiveDealNetworkClient
 import com.example.model.DealCategory
 import com.example.model.DirectRetailerLink
+import com.example.ui.components.CompactSearchPill
 import com.example.ui.components.LiveProductComparisonCard
+import com.example.ui.components.PulsingLiveDot
+import com.example.ui.components.ScrollToTopPill
+import com.example.ui.components.SpinningSyncIcon
 import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.copyTextToClipboard
 import com.example.ui.util.openSafeExternalUrl
 import com.example.viewmodel.DealRadarViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MultiPlatformSearchScreen(
     viewModel: DealRadarViewModel,
+    listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
     val ext = WorthItTheme.extendedColors
 
     val searchQuery by viewModel.platformSearchQuery.collectAsStateWithLifecycle()
@@ -76,96 +84,75 @@ fun MultiPlatformSearchScreen(
     val liveResponse by viewModel.liveSearchResponse.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
 
+    val showScrollToTop by remember(listState) {
+        derivedStateOf { listState.firstVisibleItemIndex >= 2 }
+    }
+
     val quickQueries = listOf("RTX 5090", "MacBook", "AirPods", "OLED", "SSD 2TB", "PS5", "Dyson")
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .testTag("multi_platform_search_screen")
     ) {
-        // Real Multi-Platform Search Bar
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updatePlatformSearchQuery(it) },
-                placeholder = { Text("Search any SKU (5090, AirPods, SSD)...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = WorthItIcons.SearchOutlined,
-                        contentDescription = "Live search",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                trailingIcon = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { viewModel.updatePlatformSearchQuery("") },
-                                modifier = Modifier.minimumInteractiveComponentSize()
-                            ) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
-                            }
-                        }
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Compact 42dp Multi-Platform Search Pill
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                CompactSearchPill(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updatePlatformSearchQuery(it) },
+                    placeholder = "Search any SKU (5090, AirPods, SSD)...",
+                    inputTestTag = "multi_store_search_input",
+                    onSearchSubmit = {
+                        keyboard?.hide()
+                        viewModel.submitPlatformSearchNow()
+                    },
+                    trailingAction = {
                         IconButton(
                             onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 keyboard?.hide()
                                 viewModel.submitPlatformSearchNow(forceRefresh = true)
                             },
                             enabled = searchQuery.isNotBlank() && !isSearching,
                             modifier = Modifier
-                                .minimumInteractiveComponentSize()
+                                .size(36.dp)
                                 .testTag("refresh_search_btn")
                         ) {
-                            Icon(
-                                imageVector = WorthItIcons.SyncRefresh,
+                            SpinningSyncIcon(
+                                isSyncing = isSearching,
+                                tint = if (searchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                                 contentDescription = "Run live search",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                size = 18.dp
                             )
                         }
-                    }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        keyboard?.hide()
-                        viewModel.submitPlatformSearchNow()
-                    }
-                ),
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = ext.hairline
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("multi_store_search_input")
-            )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(quickQueries) { kw ->
-                    SuggestionChip(
-                        onClick = {
-                            keyboard?.hide()
-                            viewModel.submitPlatformSearchNow(kw)
-                        },
-                        label = { Text(kw, style = MaterialTheme.typography.labelMedium) }
-                    )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    items(quickQueries) { kw ->
+                        SuggestionChip(
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                keyboard?.hide()
+                                viewModel.submitPlatformSearchNow(kw)
+                            },
+                            label = { Text(kw, style = MaterialTheme.typography.labelMedium) },
+                            modifier = Modifier.height(32.dp)
+                        )
+                    }
                 }
             }
-        }
 
         if (isSearching) {
             LinearProgressIndicator(
@@ -238,13 +225,14 @@ fun MultiPlatformSearchScreen(
             else -> {
                 val resp = liveResponse
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // Honest progressive streaming telemetry bar
                     if (resp != null) {
-                        item {
+                        item(key = "search_telemetry_bar") {
                             val okCount = resp.sourcesTelemetry.count { it.isHealthy }
                             val completedCount = resp.sourcesTelemetry.size
                             val expectedCount = LiveDealNetworkClient.TOTAL_SEARCH_SOURCES
@@ -259,13 +247,13 @@ fun MultiPlatformSearchScreen(
                             }
                             Surface(
                                 color = ext.successContainer.copy(alpha = 0.7f),
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        .padding(horizontal = 12.dp, vertical = 7.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -273,10 +261,10 @@ fun MultiPlatformSearchScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.weight(1f)
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(7.dp)
-                                                .background(ext.livePulse, CircleShape)
+                                        PulsingLiveDot(
+                                            color = ext.livePulse,
+                                            isActive = true,
+                                            size = 7.dp
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
@@ -344,7 +332,8 @@ fun MultiPlatformSearchScreen(
                                         }
                                         viewModel.recordOutboundClick(quote.id, quote.merchant, group.category)
                                         openSafeExternalUrl(context, quote.buyUrl)
-                                    }
+                                    },
+                                    modifier = Modifier.animateItem()
                                 )
                             }
                         }
@@ -354,6 +343,18 @@ fun MultiPlatformSearchScreen(
                 }
             }
         }
+        }
+
+        ScrollToTopPill(
+            visible = showScrollToTop && searchQuery.isNotBlank(),
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                scope.launch { listState.animateScrollToItem(0) }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 14.dp)
+        )
     }
 }
 
