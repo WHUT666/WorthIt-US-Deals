@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.model.AppThemeMode
 import com.example.model.DealCategory
 import com.example.model.USMerchant
 import com.example.model.UserPreferenceProfile
@@ -32,6 +33,7 @@ class UserPreferencesDataStore(private val context: Context) {
         val WATCHED_KEYWORDS = stringPreferencesKey("watched_keywords_csv")
         val PUSH_NOTIFICATIONS = booleanPreferencesKey("push_notifications_enabled")
         val AUTO_COPY_COUPONS = booleanPreferencesKey("auto_copy_coupons")
+        val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val WEIGHT_DISCOUNT = floatPreferencesKey("weight_discount")
         val WEIGHT_HISTORIC = floatPreferencesKey("weight_historic")
         val WEIGHT_SOCIAL = floatPreferencesKey("weight_social")
@@ -68,6 +70,7 @@ class UserPreferencesDataStore(private val context: Context) {
             watchedKeywords = keywords,
             pushNotificationsEnabled = prefs[Keys.PUSH_NOTIFICATIONS] ?: defaultProfile.pushNotificationsEnabled,
             autoCopyCoupons = prefs[Keys.AUTO_COPY_COUPONS] ?: defaultProfile.autoCopyCoupons,
+            themeMode = AppThemeMode.fromNameSafe(prefs[Keys.APP_THEME_MODE]),
             discountWeight = prefs[Keys.WEIGHT_DISCOUNT] ?: defaultProfile.discountWeight,
             historicLowWeight = prefs[Keys.WEIGHT_HISTORIC] ?: defaultProfile.historicLowWeight,
             socialWorthWeight = prefs[Keys.WEIGHT_SOCIAL] ?: defaultProfile.socialWorthWeight,
@@ -85,10 +88,17 @@ class UserPreferencesDataStore(private val context: Context) {
             prefs[Keys.WATCHED_KEYWORDS] = profile.watchedKeywords.joinToString("|")
             prefs[Keys.PUSH_NOTIFICATIONS] = profile.pushNotificationsEnabled
             prefs[Keys.AUTO_COPY_COUPONS] = profile.autoCopyCoupons
+            prefs[Keys.APP_THEME_MODE] = profile.themeMode.name
             prefs[Keys.WEIGHT_DISCOUNT] = profile.discountWeight
             prefs[Keys.WEIGHT_HISTORIC] = profile.historicLowWeight
             prefs[Keys.WEIGHT_SOCIAL] = profile.socialWorthWeight
             prefs[Keys.WEIGHT_PERSONAL] = profile.personalAffinityWeight
+        }
+    }
+
+    suspend fun saveThemeMode(themeMode: AppThemeMode) {
+        context.worthItPrefsDataStore.edit { prefs ->
+            prefs[Keys.APP_THEME_MODE] = themeMode.name
         }
     }
 }

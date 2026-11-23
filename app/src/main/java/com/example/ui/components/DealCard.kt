@@ -93,20 +93,20 @@ fun DealCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .testTag("deal_card_${deal.id}"),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
-            width = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) 1.5.dp else 1.dp,
+            width = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) 1.dp else 0.5.dp,
             color = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                ext.warning.copy(alpha = 0.5f)
             } else {
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                ext.hairline
             }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
     ) {
         Column(
             modifier = Modifier
@@ -277,12 +277,12 @@ fun DealCard(
                         MerchantBadge(deal.merchant)
                         if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
                             Surface(
-                                color = MaterialTheme.colorScheme.primary,
+                                color = ext.warningContainer,
                                 shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
                                     text = "FLASH",
-                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    color = ext.warning,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -307,7 +307,7 @@ fun DealCard(
                             text = formatRelativeTime(deal.publishedAtMillis),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
-                                MaterialTheme.colorScheme.primary
+                                ext.warning
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
@@ -346,7 +346,7 @@ fun DealCard(
                     Text(
                         text = formatMoney(displayPrice),
                         style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = ext.priceAccent,
                         fontWeight = FontWeight.Bold
                     )
                     if (deal.originalPrice != null && deal.originalPrice > displayPrice) {
@@ -361,12 +361,12 @@ fun DealCard(
                     if (deal.discountPercent > 0) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            color = ext.priceAccentContainer,
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
                                 text = "-${deal.discountPercent}%",
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                color = ext.priceAccent,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -377,7 +377,7 @@ fun DealCard(
                     Text(
                         text = "Live Merchant Offer",
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.secondary,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -413,7 +413,8 @@ fun DealCard(
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 10.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                thickness = 0.5.dp,
+                color = ext.hairline
             )
 
             // Action Footer: Worth / Not Worth + Direct Conversion CTA

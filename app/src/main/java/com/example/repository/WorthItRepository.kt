@@ -10,6 +10,7 @@ import com.example.data.local.UserPreferencesDataStore
 import com.example.data.network.DealTextParser
 import com.example.data.network.LiveDealNetworkClient
 import com.example.data.network.LiveVerificationResult
+import com.example.model.AppThemeMode
 import com.example.model.ConversionFunnelStats
 import com.example.model.CouponDetail
 import com.example.model.DealCategory
@@ -708,6 +709,10 @@ class WorthItRepository(
 
     suspend fun saveUserProfile(profile: UserPreferenceProfile) {
         prefsDataStore.saveProfile(profile)
+    }
+
+    suspend fun saveThemeMode(themeMode: AppThemeMode) {
+        prefsDataStore.saveThemeMode(themeMode)
     }
 
     fun sendNotificationForDeal(deal: DealItem, reason: String): Boolean {

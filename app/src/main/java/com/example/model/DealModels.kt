@@ -138,6 +138,17 @@ enum class FreshnessTier(val badgeLabel: String) {
     STALE("STALE")
 }
 
+enum class AppThemeMode(val displayName: String) {
+    LIGHT("Light"),
+    SYSTEM("Auto"),
+    DARK("Dark");
+
+    companion object {
+        fun fromNameSafe(name: String?): AppThemeMode =
+            entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: LIGHT
+    }
+}
+
 data class PricePoint(
     val dateLabel: String,
     val price: Double,
@@ -229,6 +240,7 @@ data class UserPreferenceProfile(
     val watchedKeywords: List<String> = listOf("5090", "OLED", "AirPods", "MacBook"),
     val pushNotificationsEnabled: Boolean = true,
     val autoCopyCoupons: Boolean = true,
+    val themeMode: AppThemeMode = AppThemeMode.LIGHT,
     // Rebalanced weights emphasizing time-sensitivity for real flash deals
     val discountWeight: Float = 0.22f,
     val historicLowWeight: Float = 0.18f,

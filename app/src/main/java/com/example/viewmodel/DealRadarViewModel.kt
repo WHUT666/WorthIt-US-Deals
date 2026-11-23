@@ -7,6 +7,7 @@ import com.example.algorithm.DealPushRecommendationEngine
 import com.example.data.local.AppDatabase
 import com.example.data.local.UserPreferencesDataStore
 import com.example.data.network.LiveDealNetworkClient
+import com.example.model.AppThemeMode
 import com.example.model.ConversionFunnelStats
 import com.example.model.DealCategory
 import com.example.model.DealItem
@@ -382,6 +383,16 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             repository.saveUserProfile(updated)
         }
+    }
+
+    fun setThemeMode(mode: AppThemeMode) {
+        viewModelScope.launch {
+            repository.saveThemeMode(mode)
+        }
+    }
+
+    fun toggleLightDarkTheme(isCurrentlyDark: Boolean) {
+        setThemeMode(if (isCurrentlyDark) AppThemeMode.LIGHT else AppThemeMode.DARK)
     }
 
     fun resetBehavioralLearning() {

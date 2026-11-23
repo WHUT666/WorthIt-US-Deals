@@ -43,6 +43,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -53,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -101,69 +103,82 @@ fun DealDetailScreen(
     BackHandler { onBack() }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text(deal.brand, maxLines = 1) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_btn")) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = ext.chromeBarBg,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.primary,
+                        actionIconContentColor = MaterialTheme.colorScheme.primary
+                    ),
+                    title = { Text(deal.brand, maxLines = 1, fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_btn")) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = { viewModel.toggleSaveDeal(deal) },
+                            modifier = Modifier.testTag("detail_save_btn")
+                        ) {
+                            Icon(
+                                imageVector = if (deal.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = "Save deal",
+                                tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                val pricePart = activePrice?.let { " for ${formatMoney(it)}" } ?: ""
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    putExtra(Intent.EXTRA_TEXT, "${deal.title}$pricePart at ${deal.merchant.displayName}: ${deal.buyUrl}")
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Share Deal"))
+                            },
+                            modifier = Modifier.testTag("detail_share_btn")
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Share deal")
+                        }
                     }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { viewModel.toggleSaveDeal(deal) },
-                        modifier = Modifier.testTag("detail_save_btn")
-                    ) {
-                        Icon(
-                            imageVector = if (deal.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = "Save deal",
-                            tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val pricePart = activePrice?.let { " for ${formatMoney(it)}" } ?: ""
-                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                putExtra(Intent.EXTRA_TEXT, "${deal.title}$pricePart at ${deal.merchant.displayName}: ${deal.buyUrl}")
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(sendIntent, "Share Deal"))
-                        },
-                        modifier = Modifier.testTag("detail_share_btn")
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = "Share deal")
-                    }
-                }
-            )
+                )
+                HorizontalDivider(thickness = 0.5.dp, color = ext.hairline)
+            }
         },
         bottomBar = {
             Surface(
-                tonalElevation = 6.dp,
-                shadowElevation = 6.dp,
+                color = ext.chromeBarBg,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                        .navigationBarsPadding(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = if (deal.cashBackRate > 0 && deal.effectivePriceAfterCashback != null) "Est. Net After Cashback" else "Live Price",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        val displayPrice = deal.effectivePriceAfterCashback ?: activePrice
-                        Text(
-                            text = displayPrice?.let { formatMoney(it) } ?: "Check Store",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                Column {
+                    HorizontalDivider(thickness = 0.5.dp, color = ext.hairline)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .navigationBarsPadding(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = if (deal.cashBackRate > 0 && deal.effectivePriceAfterCashback != null) "Est. Net After Cashback" else "Live Price",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val displayPrice = deal.effectivePriceAfterCashback ?: activePrice
+                            Text(
+                                text = displayPrice?.let { formatMoney(it) } ?: "Check Store",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ext.priceAccent
+                            )
+                        }
 
                     Button(
                         onClick = {
@@ -187,6 +202,7 @@ fun DealDetailScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
                     }
                 }
             }
@@ -246,12 +262,12 @@ fun DealDetailScreen(
                 Spacer(modifier = Modifier.width(6.dp))
                 if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
                     Surface(
-                        color = MaterialTheme.colorScheme.primary,
+                        color = ext.warningContainer,
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
                             text = "FLASH",
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = ext.warning,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
@@ -304,9 +320,10 @@ fun DealDetailScreen(
 
             // Price & Coupon Card
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                border = BorderStroke(0.5.dp, ext.hairline),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -320,7 +337,7 @@ fun DealDetailScreen(
                                 Text(
                                     text = activePrice?.let { formatMoney(it) } ?: "See Merchant",
                                     style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = ext.priceAccent,
                                     fontWeight = FontWeight.Bold
                                 )
                                 if (deal.originalPrice != null && activePrice != null && deal.originalPrice > activePrice) {
@@ -337,7 +354,7 @@ fun DealDetailScreen(
                                 Text(
                                     text = "Save ${formatMoney(deal.originalPrice - activePrice)} (${deal.discountPercent}% OFF)",
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = ext.priceAccent
                                 )
                             }
                         }

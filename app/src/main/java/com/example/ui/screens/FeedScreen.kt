@@ -119,10 +119,12 @@ fun FeedScreen(
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    unfocusedBorderColor = ext.hairline
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -136,7 +138,7 @@ fun FeedScreen(
                 enabled = !isSyncing,
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape)
                     .testTag("feed_sync_btn")
             ) {
                 if (isSyncing) {
@@ -145,7 +147,7 @@ fun FeedScreen(
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh live US feeds",
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -257,8 +259,9 @@ fun FeedScreen(
         val healthyCount = sourceStatuses.count { it.isHealthy }
         val totalSources = sourceStatuses.size
         Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
-            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(12.dp),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, ext.hairline),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -332,9 +335,15 @@ fun FeedScreen(
                         )
                     },
                     colors = FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
                         selectedContainerColor = ext.success,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                         selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = freshOnly,
+                        borderColor = ext.hairline
                     ),
                     modifier = Modifier.testTag("fresh_only_chip")
                 )
@@ -351,8 +360,14 @@ fun FeedScreen(
                         )
                     },
                     colors = FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = isSelected,
+                        borderColor = ext.hairline
                     ),
                     modifier = Modifier.testTag("category_chip_${cat.name}")
                 )

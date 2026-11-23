@@ -139,10 +139,12 @@ fun MultiPlatformSearchScreen(
                         viewModel.submitPlatformSearchNow()
                     }
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    unfocusedBorderColor = ext.hairline
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -353,10 +355,12 @@ private fun DirectStoreLauncherCard(
     links: List<DirectRetailerLink>,
     onOpenStore: (DirectRetailerLink) -> Unit
 ) {
+    val ext = WorthItTheme.extendedColors
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        border = BorderStroke(0.5.dp, ext.hairline),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
