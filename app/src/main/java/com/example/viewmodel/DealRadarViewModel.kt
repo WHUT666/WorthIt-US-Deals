@@ -30,7 +30,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 data class AlertBanner(
     val id: String,
@@ -39,13 +42,19 @@ data class AlertBanner(
     val dealId: String? = null
 )
 
+private data class FeedFilterState(
+    val category: DealCategory,
+    val query: String,
+    val freshOnly: Boolean
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class DealRadarViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: WorthItRepository = WorthItRepository(
         dealDao = AppDatabase.getInstance(application).dealDao(),
         prefsDataStore = UserPreferencesDataStore(application),
-        networkClient = LiveDealNetworkClient(),
+        networkClient = LiveDealNetworkClient(cacheDir = application.cacheDir),
         notificationManager = DealNotificationManager(application)
     )
 
@@ -55,6 +64,9 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
     private val _feedFilterQuery = MutableStateFlow("")
     val feedFilterQuery: StateFlow<String> = _feedFilterQuery.asStateFlow()
 
+    private val _freshOnlyFilter = MutableStateFlow(false)
+    val freshOnlyFilter: StateFlow<Boolean> = _freshOnlyFilter.asStateFlow()
+
     private val _selectedDealId = MutableStateFlow<String?>(null)
 
     private val _isSyncingFeeds = MutableStateFlow(false)
@@ -63,13 +75,16 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
     private val _syncMessage = MutableStateFlow<String?>(null)
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
 
+    private val _verifyingDealIds = MutableStateFlow<Set<String>>(emptySet())
+    val verifyingDealIds: StateFlow<Set<String>> = _verifyingDealIds.asStateFlow()
+
     private val _latestAlert = MutableStateFlow<AlertBanner?>(null)
     val latestAlert: StateFlow<AlertBanner?> = _latestAlert.asStateFlow()
 
     private val _copiedCouponToast = MutableStateFlow<String?>(null)
     val copiedCouponToast: StateFlow<String?> = _copiedCouponToast.asStateFlow()
 
-    // Live Multi-Platform Search state
+    // Live Multi-Platform Search state (Stale-While-Revalidate streaming)
     private val _platformSearchQuery = MutableStateFlow("")
     val platformSearchQuery: StateFlow<String> = _platformSearchQuery.asStateFlow()
 
@@ -105,19 +120,27 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
     val savedDeals: StateFlow<List<DealItem>> = repository.savedDealsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val feedFilterState = combine(
+        selectedCategory,
+        feedFilterQuery,
+        freshOnlyFilter
+    ) { category, query, freshOnly ->
+        FeedFilterState(category = category, query = query, freshOnly = freshOnly)
+    }
+
     val rankedDeals: StateFlow<List<DealPushRecommendationEngine.ScoredDeal>> = combine(
         allDeals,
         userProfile,
         behaviorAffinity,
-        selectedCategory,
-        feedFilterQuery
-    ) { deals, profile, affinity, category, query ->
+        feedFilterState
+    ) { deals, profile, affinity, filter ->
         DealPushRecommendationEngine.scoreAndRankDeals(
             deals = deals,
             profile = profile,
             behaviorAffinity = affinity,
-            filterCategory = category,
-            searchQuery = query
+            filterCategory = filter.category,
+            searchQuery = filter.query,
+            freshOnly = filter.freshOnly
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -139,31 +162,58 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var searchJob: Job? = null
+    private var syncJob: Job? = null
 
     init {
         syncLiveDealsNow()
+        startAutoRefreshPulse()
+    }
+
+    /**
+     * Keeps time-sensitive flash drops fresh automatically while the app is open
+     * without duplicating an in-flight sync.
+     */
+    private fun startAutoRefreshPulse() {
+        viewModelScope.launch {
+            while (isActive) {
+                delay(180_000L) // Refresh every 3 minutes
+                if (!_isSyncingFeeds.value) {
+                    syncLiveDealsNow()
+                }
+            }
+        }
     }
 
     fun syncLiveDealsNow() {
         if (_isSyncingFeeds.value) return
-        viewModelScope.launch {
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch {
             _isSyncingFeeds.value = true
-            _syncMessage.value = null
+            _syncMessage.value = "Streaming 0/${LiveDealNetworkClient.TOTAL_FEED_SOURCES} US sources..."
             try {
-                val outcome = repository.syncLiveDeals()
-                if (outcome.healthySources == 0) {
-                    _syncMessage.value = "Offline or blocked: showing cached deals from Room."
-                } else {
-                    _syncMessage.value = "Synced ${outcome.fetchedCount} live deals from ${outcome.healthySources}/${outcome.totalSources} US sources."
-                }
-                outcome.triggeredAlerts.firstOrNull()?.let { alert ->
-                    val priceLabel = alert.deal.currentPrice?.let { "$${String.format("%.2f", it)}" } ?: "Deal Alert"
-                    _latestAlert.value = AlertBanner(
-                        id = alert.deal.id,
-                        title = "Push Alert • ${alert.deal.merchant.displayName} ($priceLabel)",
-                        subtitle = "${alert.recommendationReason.title}: ${alert.deal.title}",
-                        dealId = alert.deal.id
-                    )
+                repository.syncLiveDealsStreaming().collect { progress ->
+                    if (!progress.isFinished) {
+                        _syncMessage.value =
+                            "Streaming ${progress.completedSources}/${progress.totalSources} sources (${progress.totalFetchedDeals} live deals)..."
+                    } else {
+                        if (progress.healthySources == 0) {
+                            _syncMessage.value = "Offline or blocked: showing cached deals from Room."
+                        } else {
+                            _syncMessage.value =
+                                "Synced ${progress.totalFetchedDeals} live deals (${progress.healthySources}/${progress.totalSources} sources online)"
+                        }
+                        progress.triggeredAlerts.firstOrNull()?.let { alert ->
+                            val priceLabel = alert.deal.effectiveCurrentPrice?.let {
+                                "$${String.format(Locale.US, "%.2f", it)}"
+                            } ?: "Flash Alert"
+                            _latestAlert.value = AlertBanner(
+                                id = alert.deal.id,
+                                title = "Push Alert • ${alert.deal.merchant.displayName} ($priceLabel)",
+                                subtitle = "${alert.recommendationReason.title}: ${alert.deal.title}",
+                                dealId = alert.deal.id
+                            )
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 _syncMessage.value = "Sync error: ${e.message?.take(60) ?: "Check connection"}"
@@ -181,11 +231,23 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
         _feedFilterQuery.value = query
     }
 
+    fun toggleFreshOnlyFilter() {
+        _freshOnlyFilter.value = !_freshOnlyFilter.value
+    }
+
+    fun clearFeedFilters() {
+        _selectedCategory.value = DealCategory.ALL
+        _feedFilterQuery.value = ""
+        _freshOnlyFilter.value = false
+    }
+
     fun openDealDetail(deal: DealItem) {
         _selectedDealId.value = deal.id
         viewModelScope.launch {
             repository.logConversionEvent(deal.id, deal.merchant, deal.category, "DETAIL_VIEW")
         }
+        // Automatically verify real-time stock & price against the merchant page on entry
+        verifyDealLiveNow(deal, force = false)
     }
 
     fun closeDealDetail() {
@@ -194,6 +256,30 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun openDealById(dealId: String) {
         _selectedDealId.value = dealId
+        allDeals.value.firstOrNull { it.id == dealId }?.let { deal ->
+            verifyDealLiveNow(deal, force = false)
+        }
+    }
+
+    /**
+     * Real-time HTTP stock & price check against the deal's retailer URL.
+     * Skips redundant network checks if verified within the past 2 minutes unless force = true.
+     */
+    fun verifyDealLiveNow(deal: DealItem, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && deal.verifiedAtMillis > 0L && (now - deal.verifiedAtMillis) < 120_000L) {
+            return
+        }
+        if (_verifyingDealIds.value.contains(deal.id)) return
+
+        viewModelScope.launch {
+            _verifyingDealIds.update { it + deal.id }
+            try {
+                repository.verifyDealLive(deal)
+            } finally {
+                _verifyingDealIds.update { it - deal.id }
+            }
+        }
     }
 
     fun voteDeal(deal: DealItem, isWorth: Boolean) {
@@ -234,25 +320,30 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         searchJob = viewModelScope.launch {
-            delay(450) // Debounce typing before firing live multi-source HTTP search
-            executeLiveSearch(query)
+            delay(250) // Crisp 250ms debounce before streaming local Room + remote feeds
+            executeLiveSearch(query, forceRefresh = false)
         }
     }
 
-    fun submitPlatformSearchNow(query: String = _platformSearchQuery.value) {
+    fun submitPlatformSearchNow(
+        query: String = _platformSearchQuery.value,
+        forceRefresh: Boolean = false
+    ) {
         _platformSearchQuery.value = query
         searchJob?.cancel()
         if (query.isBlank()) return
         searchJob = viewModelScope.launch {
-            executeLiveSearch(query)
+            executeLiveSearch(query, forceRefresh = forceRefresh)
         }
     }
 
-    private suspend fun executeLiveSearch(query: String) {
+    private suspend fun executeLiveSearch(query: String, forceRefresh: Boolean) {
         _isSearchingPlatforms.value = true
         try {
-            val response = repository.searchMultiPlatformLive(query)
-            _liveSearchResponse.value = response
+            repository.searchMultiPlatformLiveStreaming(query, forceRefresh = forceRefresh)
+                .collect { partialOrFinalResponse ->
+                    _liveSearchResponse.value = partialOrFinalResponse
+                }
         } finally {
             _isSearchingPlatforms.value = false
         }
@@ -302,7 +393,9 @@ class DealRadarViewModel(application: Application) : AndroidViewModel(applicatio
     fun dispatchTopDealNotification(): Boolean {
         val top = rankedDeals.value.firstOrNull() ?: return false
         val posted = repository.sendNotificationForDeal(top.deal, top.recommendationReason.title)
-        val priceLabel = top.deal.currentPrice?.let { "$${String.format("%.2f", it)}" } ?: "Live Deal"
+        val priceLabel = top.deal.effectiveCurrentPrice?.let {
+            "$${String.format(Locale.US, "%.2f", it)}"
+        } ?: "Live Deal"
         _latestAlert.value = AlertBanner(
             id = System.currentTimeMillis().toString(),
             title = if (posted) "System Push Sent • ${top.deal.merchant.displayName}" else "In-App Alert • ${top.deal.merchant.displayName}",

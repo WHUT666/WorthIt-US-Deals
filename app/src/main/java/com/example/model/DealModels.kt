@@ -118,6 +118,26 @@ enum class DealCategory(val displayName: String) {
     }
 }
 
+enum class VerificationStatus(val label: String) {
+    UNVERIFIED("Unverified"),
+    VERIFIED_LIVE("Verified Live"),
+    PRICE_INCREASED("Price Increased"),
+    OUT_OF_STOCK("Out of Stock / Expired"),
+    STORE_CHECK_REQUIRED("Check at Store");
+
+    companion object {
+        fun fromNameSafe(name: String): VerificationStatus =
+            entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: UNVERIFIED
+    }
+}
+
+enum class FreshnessTier(val badgeLabel: String) {
+    FLASH("FLASH"),
+    FRESH("FRESH"),
+    AGING("AGING"),
+    STALE("STALE")
+}
+
 data class PricePoint(
     val dateLabel: String,
     val price: Double,
@@ -135,9 +155,9 @@ data class DealItem(
     val brand: String,
     val merchant: USMerchant,
     val category: DealCategory,
-    val currentPrice: Double?,          // Null when source post doesn't specify a numeric dollar price
-    val originalPrice: Double?,         // Null when source post doesn't specify MSRP/list price
-    val historicLowPrice: Double?,      // Lowest price recorded across Room snapshots
+    val currentPrice: Double?,
+    val originalPrice: Double?,
+    val historicLowPrice: Double?,
     val isHistoricLow: Boolean,
     val coupon: CouponDetail? = null,
     val cashBackRate: Double = 0.0,
@@ -145,7 +165,7 @@ data class DealItem(
     val worthVotes: Int = 0,
     val notWorthVotes: Int = 0,
     val communityCommentsCount: Int = 0,
-    val sourceName: String,             // e.g. "Slickdeals", "r/buildapcsales", "DealNews", "CheapShark"
+    val sourceName: String,
     val imageUrl: String? = null,
     val buyUrl: String,
     val sourceUrl: String,
@@ -154,11 +174,19 @@ data class DealItem(
     val lastCheckedAtMillis: Long = System.currentTimeMillis(),
     val priceHistory: List<PricePoint> = emptyList(),
     val isSaved: Boolean = false,
-    val userVote: Boolean? = null       // true = Worth, false = Not Worth, null = none
+    val userVote: Boolean? = null,
+    val verificationStatus: VerificationStatus = VerificationStatus.UNVERIFIED,
+    val verifiedPrice: Double? = null,
+    val verifiedAtMillis: Long = 0L,
+    val verificationNote: String = "",
+    val isExpired: Boolean = false
 ) {
+    val effectiveCurrentPrice: Double?
+        get() = verifiedPrice ?: currentPrice
+
     val discountPercent: Int
         get() {
-            val cur = currentPrice ?: return 0
+            val cur = effectiveCurrentPrice ?: return 0
             val orig = originalPrice ?: return 0
             if (orig <= 0.0 || orig <= cur) return 0
             return (((orig - cur) / orig) * 100.0).toInt().coerceIn(0, 99)
@@ -171,7 +199,17 @@ data class DealItem(
         }
 
     val effectivePriceAfterCashback: Double?
-        get() = currentPrice?.let { it * (1.0 - cashBackRate) }
+        get() = effectiveCurrentPrice?.let { it * (1.0 - cashBackRate) }
+
+    fun freshnessTier(nowMillis: Long = System.currentTimeMillis()): FreshnessTier {
+        val ageMinutes = ((nowMillis - publishedAtMillis) / 60_000L).coerceAtLeast(0L)
+        return when {
+            ageMinutes <= 30L -> FreshnessTier.FLASH
+            ageMinutes <= 180L -> FreshnessTier.FRESH
+            ageMinutes <= 1080L -> FreshnessTier.AGING
+            else -> FreshnessTier.STALE
+        }
+    }
 }
 
 data class UserPreferenceProfile(
@@ -191,21 +229,18 @@ data class UserPreferenceProfile(
     val watchedKeywords: List<String> = listOf("5090", "OLED", "AirPods", "MacBook"),
     val pushNotificationsEnabled: Boolean = true,
     val autoCopyCoupons: Boolean = true,
-    // User-tunable algorithm weights (normalized internally to sum 1.0)
-    val discountWeight: Float = 0.25f,
-    val historicLowWeight: Float = 0.20f,
-    val socialWorthWeight: Float = 0.20f,
-    val personalAffinityWeight: Float = 0.20f,
+    // Rebalanced weights emphasizing time-sensitivity for real flash deals
+    val discountWeight: Float = 0.22f,
+    val historicLowWeight: Float = 0.18f,
+    val socialWorthWeight: Float = 0.17f,
+    val personalAffinityWeight: Float = 0.18f,
     val merchantTrustWeight: Float = 0.10f,
-    val freshnessWeight: Float = 0.05f
+    val freshnessWeight: Float = 0.15f
 )
 
-/**
- * Learned behavioral signals derived from Room ConversionEventEntity logs.
- */
 data class UserBehaviorAffinity(
-    val categoryBoosts: Map<DealCategory, Float> = emptyMap(),   // 0f..35f learned boost
-    val merchantBoosts: Map<USMerchant, Float> = emptyMap(),     // 0f..25f learned boost
+    val categoryBoosts: Map<DealCategory, Float> = emptyMap(),
+    val merchantBoosts: Map<USMerchant, Float> = emptyMap(),
     val totalInteractions: Int = 0
 )
 

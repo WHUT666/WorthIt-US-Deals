@@ -26,8 +26,12 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Forum
@@ -36,6 +40,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -63,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.algorithm.DealPushRecommendationEngine
+import com.example.model.FreshnessTier
+import com.example.model.VerificationStatus
 import com.example.ui.components.MerchantBadge
 import com.example.ui.components.PriceHistoryChartCard
 import com.example.ui.theme.WorthItTheme
@@ -83,10 +90,13 @@ fun DealDetailScreen(
     val context = LocalContext.current
     val ext = WorthItTheme.extendedColors
     val deal = scoredDeal.deal
+    val activePrice = deal.effectiveCurrentPrice
 
     val priceHistory by viewModel.selectedDealPriceHistory.collectAsStateWithLifecycle()
     val copiedToast by viewModel.copiedCouponToast.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
+    val verifyingDealIds by viewModel.verifyingDealIds.collectAsStateWithLifecycle()
+    val isVerifying = verifyingDealIds.contains(deal.id)
 
     BackHandler { onBack() }
 
@@ -112,7 +122,7 @@ fun DealDetailScreen(
                     }
                     IconButton(
                         onClick = {
-                            val pricePart = deal.currentPrice?.let { " for ${formatMoney(it)}" } ?: ""
+                            val pricePart = activePrice?.let { " for ${formatMoney(it)}" } ?: ""
                             val sendIntent = Intent(Intent.ACTION_SEND).apply {
                                 putExtra(Intent.EXTRA_TEXT, "${deal.title}$pricePart at ${deal.merchant.displayName}: ${deal.buyUrl}")
                                 type = "text/plain"
@@ -146,7 +156,7 @@ fun DealDetailScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        val displayPrice = deal.effectivePriceAfterCashback ?: deal.currentPrice
+                        val displayPrice = deal.effectivePriceAfterCashback ?: activePrice
                         Text(
                             text = displayPrice?.let { formatMoney(it) } ?: "Check Store",
                             style = MaterialTheme.typography.headlineSmall,
@@ -234,7 +244,22 @@ fun DealDetailScreen(
             ) {
                 MerchantBadge(deal.merchant)
                 Spacer(modifier = Modifier.width(6.dp))
-                if (deal.isHistoricLow && deal.currentPrice != null) {
+                if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "FLASH",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                if (deal.isHistoricLow && activePrice != null) {
                     Surface(
                         color = ext.successContainer,
                         shape = RoundedCornerShape(6.dp)
@@ -266,6 +291,17 @@ fun DealDetailScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Real-Time Stock & Price Verification Card
+            LiveVerificationBannerCard(
+                status = deal.verificationStatus,
+                note = deal.verificationNote,
+                verifiedAtMillis = deal.verifiedAtMillis,
+                isVerifying = isVerifying,
+                onReverify = { viewModel.verifyDealLiveNow(deal, force = true) }
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             // Price & Coupon Card
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -282,12 +318,12 @@ fun DealDetailScreen(
                         Column {
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = deal.currentPrice?.let { formatMoney(it) } ?: "See Merchant",
+                                    text = activePrice?.let { formatMoney(it) } ?: "See Merchant",
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
                                 )
-                                if (deal.originalPrice != null && deal.currentPrice != null && deal.originalPrice > deal.currentPrice) {
+                                if (deal.originalPrice != null && activePrice != null && deal.originalPrice > activePrice) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = formatMoney(deal.originalPrice),
@@ -297,9 +333,9 @@ fun DealDetailScreen(
                                     )
                                 }
                             }
-                            if (deal.discountPercent > 0 && deal.originalPrice != null && deal.currentPrice != null) {
+                            if (deal.discountPercent > 0 && deal.originalPrice != null && activePrice != null) {
                                 Text(
-                                    text = "Save ${formatMoney(deal.originalPrice - deal.currentPrice)} (${deal.discountPercent}% OFF)",
+                                    text = "Save ${formatMoney(deal.originalPrice - activePrice)} (${deal.discountPercent}% OFF)",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -429,7 +465,7 @@ fun DealDetailScreen(
             PriceHistoryChartCard(
                 pricePoints = priceHistory,
                 historicLow = deal.historicLowPrice,
-                currentPrice = deal.currentPrice
+                currentPrice = activePrice
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -504,6 +540,114 @@ fun DealDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun LiveVerificationBannerCard(
+    status: VerificationStatus,
+    note: String,
+    verifiedAtMillis: Long,
+    isVerifying: Boolean,
+    onReverify: () -> Unit
+) {
+    val ext = WorthItTheme.extendedColors
+    val containerColor = when {
+        isVerifying -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        status == VerificationStatus.VERIFIED_LIVE -> ext.successContainer
+        status == VerificationStatus.PRICE_INCREASED -> ext.warningContainer
+        status == VerificationStatus.OUT_OF_STOCK -> MaterialTheme.colorScheme.errorContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    }
+    val contentTint = when {
+        isVerifying -> MaterialTheme.colorScheme.primary
+        status == VerificationStatus.VERIFIED_LIVE -> ext.success
+        status == VerificationStatus.PRICE_INCREASED -> ext.warning
+        status == VerificationStatus.OUT_OF_STOCK -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val icon = when (status) {
+        VerificationStatus.VERIFIED_LIVE -> Icons.Default.Verified
+        VerificationStatus.PRICE_INCREASED -> Icons.Default.Warning
+        VerificationStatus.OUT_OF_STOCK -> Icons.Default.ErrorOutline
+        else -> Icons.Default.CheckCircle
+    }
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("live_verification_card")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (isVerifying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = contentTint
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = status.label,
+                        tint = contentTint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    val headline = if (isVerifying) {
+                        "Checking live retailer stock & price..."
+                    } else {
+                        val timeSuffix = if (verifiedAtMillis > 0L) " • ${formatRelativeTime(verifiedAtMillis)}" else ""
+                        "${status.label}$timeSuffix"
+                    }
+                    Text(
+                        text = headline,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = contentTint,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val subtitle = if (isVerifying) {
+                        "Connecting directly to merchant page to confirm active deal"
+                    } else {
+                        note.ifBlank { "Tap Re-check to verify current price & stock directly at retailer." }
+                    }
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    )
+                }
+            }
+
+            TextButton(
+                onClick = onReverify,
+                enabled = !isVerifying,
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("reverify_deal_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Re-verify deal",
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Re-check", style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }

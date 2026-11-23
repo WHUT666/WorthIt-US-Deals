@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material3.Button
@@ -49,7 +51,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.algorithm.DealPushRecommendationEngine
+import com.example.model.FreshnessTier
 import com.example.model.USMerchant
+import com.example.model.VerificationStatus
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.formatMoney
 import com.example.ui.util.formatRelativeTime
@@ -84,6 +88,7 @@ fun DealCard(
 ) {
     val deal = scoredDeal.deal
     val ext = WorthItTheme.extendedColors
+    val displayPrice = deal.effectiveCurrentPrice
 
     Card(
         modifier = modifier
@@ -93,7 +98,14 @@ fun DealCard(
             .testTag("deal_card_${deal.id}"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        border = BorderStroke(
+            width = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) 1.5.dp else 1.dp,
+            color = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            }
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
@@ -101,7 +113,7 @@ fun DealCard(
                 .fillMaxWidth()
                 .padding(14.dp)
         ) {
-            // Top bar: Algorithmic Match Score & Save Bookmark
+            // Top bar: Algorithmic Match Score, Freshness/Verification cue & Save Bookmark
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -109,30 +121,104 @@ fun DealCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .background(
-                            if (scoredDeal.matchesWatchedKeyword) ext.warningContainer else MaterialTheme.colorScheme.primaryContainer,
-                            RoundedCornerShape(10.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Bolt,
-                        contentDescription = null,
-                        tint = if (scoredDeal.matchesWatchedKeyword) ext.warning else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    val primaryTag = scoredDeal.recommendationReason.tags.firstOrNull() ?: deal.sourceName
-                    Text(
-                        text = "Score ${scoredDeal.compositeScore.toInt()} • $primaryTag",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (scoredDeal.matchesWatchedKeyword) ext.warning else MaterialTheme.colorScheme.onPrimaryContainer,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(
+                                if (scoredDeal.matchesWatchedKeyword) ext.warningContainer else MaterialTheme.colorScheme.primaryContainer,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = if (scoredDeal.matchesWatchedKeyword) ext.warning else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        val primaryTag = scoredDeal.recommendationReason.tags.firstOrNull() ?: deal.sourceName
+                        Text(
+                            text = "Score ${scoredDeal.compositeScore.toInt()} • $primaryTag",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (scoredDeal.matchesWatchedKeyword) ext.warning else MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Live Verification status chip (when verified)
+                    when (deal.verificationStatus) {
+                        VerificationStatus.VERIFIED_LIVE -> {
+                            Surface(
+                                color = ext.successContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Verified,
+                                        contentDescription = "Verified live",
+                                        tint = ext.success,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Live",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ext.success,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        VerificationStatus.PRICE_INCREASED -> {
+                            Surface(
+                                color = ext.warningContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = "Price increased",
+                                        tint = ext.warning,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Price Up",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ext.warning,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        VerificationStatus.OUT_OF_STOCK -> {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = "Sold Out",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                        else -> Unit
+                    }
                 }
 
                 IconButton(
@@ -189,7 +275,20 @@ fun DealCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         MerchantBadge(deal.merchant)
-                        if (deal.isHistoricLow && deal.currentPrice != null) {
+                        if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = "FLASH",
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (deal.isHistoricLow && displayPrice != null) {
                             Surface(
                                 color = ext.successContainer,
                                 shape = RoundedCornerShape(6.dp)
@@ -207,7 +306,12 @@ fun DealCard(
                         Text(
                             text = formatRelativeTime(deal.publishedAtMillis),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            fontWeight = if (scoredDeal.freshnessTier == FreshnessTier.FLASH) FontWeight.Bold else FontWeight.Normal
                         )
                     }
 
@@ -238,14 +342,14 @@ fun DealCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (deal.currentPrice != null) {
+                if (displayPrice != null) {
                     Text(
-                        text = formatMoney(deal.currentPrice),
+                        text = formatMoney(displayPrice),
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold
                     )
-                    if (deal.originalPrice != null && deal.originalPrice > deal.currentPrice) {
+                    if (deal.originalPrice != null && deal.originalPrice > displayPrice) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = formatMoney(deal.originalPrice),

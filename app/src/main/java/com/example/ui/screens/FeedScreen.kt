@@ -74,6 +74,7 @@ fun FeedScreen(
     val rankedDeals by viewModel.rankedDeals.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val filterQuery by viewModel.feedFilterQuery.collectAsStateWithLifecycle()
+    val freshOnly by viewModel.freshOnlyFilter.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncingFeeds.collectAsStateWithLifecycle()
     val syncMessage by viewModel.syncMessage.collectAsStateWithLifecycle()
     val sourceStatuses by viewModel.sourceStatuses.collectAsStateWithLifecycle()
@@ -304,7 +305,7 @@ fun FeedScreen(
             }
         }
 
-        // Category Filter Chips
+        // Fresh Drops (<6h) + Category Filter Chips
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -312,6 +313,32 @@ fun FeedScreen(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            item(key = "fresh_only_chip") {
+                FilterChip(
+                    selected = freshOnly,
+                    onClick = { viewModel.toggleFreshOnlyFilter() },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = "Fresh (<6h)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = ext.success,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    modifier = Modifier.testTag("fresh_only_chip")
+                )
+            }
             items(DealCategory.entries) { cat ->
                 val isSelected = cat == selectedCategory
                 FilterChip(
@@ -370,8 +397,8 @@ fun FeedScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (filterQuery.isNotBlank() || selectedCategory != DealCategory.ALL) {
-                                "No cached deals match your filter"
+                            text = if (filterQuery.isNotBlank() || selectedCategory != DealCategory.ALL || freshOnly) {
+                                "No active deals match your current filters"
                             } else {
                                 "No live deals loaded yet"
                             },
@@ -380,14 +407,13 @@ fun FeedScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Tap Sync Now to fetch the latest live offers, or clear active filters.",
+                            text = "Tap Sync Live Feeds to pull fresh drops, or reset filters.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(14.dp))
                         Button(onClick = {
-                            viewModel.setCategory(DealCategory.ALL)
-                            viewModel.setFeedFilterQuery("")
+                            viewModel.clearFeedFilters()
                             viewModel.syncLiveDealsNow()
                         }) {
                             Text("Sync Live Feeds")

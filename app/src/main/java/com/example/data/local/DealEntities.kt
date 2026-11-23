@@ -4,7 +4,14 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "deals")
+@Entity(
+    tableName = "deals",
+    indices = [
+        Index(value = ["publishedAtMillis"]),
+        Index(value = ["isExpired"]),
+        Index(value = ["isSaved"])
+    ]
+)
 data class DealEntity(
     @PrimaryKey val id: String,
     val title: String,
@@ -29,8 +36,13 @@ data class DealEntity(
     val publishedAtMillis: Long,
     val lastCheckedAtMillis: Long,
     val isSaved: Boolean = false,
-    val userVote: Int = 0, // 1 = worth, -1 = not worth, 0 = none
-    val notificationSent: Boolean = false
+    val userVote: Int = 0,
+    val notificationSent: Boolean = false,
+    val verificationStatus: String = "UNVERIFIED",
+    val verifiedPrice: Double? = null,
+    val verifiedAtMillis: Long = 0L,
+    val verificationNote: String = "",
+    val isExpired: Boolean = false
 )
 
 @Entity(
@@ -68,6 +80,6 @@ data class ConversionEventEntity(
     val dealId: String,
     val merchantName: String,
     val categoryName: String,
-    val stage: String, // IMPRESSION, DETAIL_VIEW, COUPON_COPY, OUTBOUND_CLICK, BOOKMARK, VOTE_WORTH
+    val stage: String,
     val timestampMillis: Long = System.currentTimeMillis()
 )

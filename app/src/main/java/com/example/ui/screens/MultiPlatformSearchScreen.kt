@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.network.LiveDealNetworkClient
 import com.example.model.DealCategory
 import com.example.model.DirectRetailerLink
 import com.example.ui.components.LiveProductComparisonCard
@@ -115,7 +116,7 @@ fun MultiPlatformSearchScreen(
                         IconButton(
                             onClick = {
                                 keyboard?.hide()
-                                viewModel.submitPlatformSearchNow()
+                                viewModel.submitPlatformSearchNow(forceRefresh = true)
                             },
                             enabled = searchQuery.isNotBlank() && !isSearching,
                             modifier = Modifier
@@ -231,11 +232,21 @@ fun MultiPlatformSearchScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Honest telemetry bar showing how many live feeds responded
+                    // Honest progressive streaming telemetry bar
                     if (resp != null) {
                         item {
                             val okCount = resp.sourcesTelemetry.count { it.isHealthy }
-                            val totalCount = resp.sourcesTelemetry.size
+                            val completedCount = resp.sourcesTelemetry.size
+                            val expectedCount = LiveDealNetworkClient.TOTAL_SEARCH_SOURCES
+                            val statusText = if (isSearching) {
+                                if (completedCount == 0) {
+                                    "Instant local matches • streaming 0/$expectedCount live feeds..."
+                                } else {
+                                    "Streaming $completedCount/$expectedCount live feeds..."
+                                }
+                            } else {
+                                "Live search: $okCount/$completedCount feeds responded"
+                            }
                             Surface(
                                 color = ext.successContainer.copy(alpha = 0.7f),
                                 shape = RoundedCornerShape(10.dp),
@@ -248,7 +259,10 @@ fun MultiPlatformSearchScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(7.dp)
@@ -256,14 +270,15 @@ fun MultiPlatformSearchScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "Live search: $okCount/$totalCount feeds responded",
+                                            text = statusText,
                                             style = MaterialTheme.typography.labelMedium,
                                             color = ext.success,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "${resp.totalLiveOffers} live matches",
+                                        text = "${resp.totalLiveOffers} active",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = ext.success,
                                         fontWeight = FontWeight.Bold
@@ -284,7 +299,7 @@ fun MultiPlatformSearchScreen(
                             )
                         }
 
-                        if (resp.groups.isEmpty()) {
+                        if (resp.groups.isEmpty() && !isSearching) {
                             item {
                                 Card(
                                     shape = RoundedCornerShape(16.dp),

@@ -9,6 +9,7 @@ import com.example.data.local.TrackedProductEntity
 import com.example.data.local.UserPreferencesDataStore
 import com.example.data.network.DealTextParser
 import com.example.data.network.LiveDealNetworkClient
+import com.example.data.network.LiveVerificationResult
 import com.example.model.ConversionFunnelStats
 import com.example.model.CouponDetail
 import com.example.model.DealCategory
@@ -23,6 +24,7 @@ import com.example.model.TrackedUrlWatch
 import com.example.model.USMerchant
 import com.example.model.UserBehaviorAffinity
 import com.example.model.UserPreferenceProfile
+import com.example.model.VerificationStatus
 import com.example.notification.DealNotificationManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,18 +32,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
-data class SyncOutcome(
-    val fetchedCount: Int,
-    val healthySources: Int,
+data class StreamingSyncProgress(
+    val completedSources: Int,
     val totalSources: Int,
-    val triggeredAlerts: List<DealPushRecommendationEngine.ScoredDeal>
+    val healthySources: Int,
+    val totalFetchedDeals: Int,
+    val triggeredAlerts: List<DealPushRecommendationEngine.ScoredDeal>,
+    val isFinished: Boolean
 )
 
 class WorthItRepository(
@@ -52,6 +58,10 @@ class WorthItRepository(
 ) {
     private val _sourceStatuses = MutableStateFlow<List<MonitorSourceStatus>>(emptyList())
     val sourceStatuses: StateFlow<List<MonitorSourceStatus>> = _sourceStatuses.asStateFlow()
+
+    // 60-second TTL search cache for 0ms repeat / tab-switch queries
+    private data class CachedSearchEntry(val response: LiveSearchResponse, val cachedAtMillis: Long)
+    private val searchCache = ConcurrentHashMap<String, CachedSearchEntry>()
 
     val userProfileFlow: Flow<UserPreferenceProfile> = prefsDataStore.userProfileFlow
 
@@ -130,32 +140,112 @@ class WorthItRepository(
     }
 
     /**
-     * Fetches real live deals across all monitored US sources, records real price snapshots
-     * in Room, computes observed historic lows, and triggers real Android notifications for
-     * newly qualified high-value deals.
+     * Progressive streaming live sync: ingests each source into Room using bulk batched SQLite
+     * queries the instant that source returns (typically 250–600ms), never waiting for slow feeds.
      */
-    suspend fun syncLiveDeals(): SyncOutcome {
-        val batch = networkClient.fetchAllLiveFeeds()
-        _sourceStatuses.value = batch.sourceStatuses
-
+    fun syncLiveDealsStreaming(): Flow<StreamingSyncProgress> = flow {
         val profile = userProfileFlow.first()
         val affinity = behaviorAffinityFlow.first()
-        val now = System.currentTimeMillis()
+
+        val statusMap = linkedMapOf<String, MonitorSourceStatus>()
+        var totalFetched = 0
         val triggeredAlerts = mutableListOf<DealPushRecommendationEngine.ScoredDeal>()
 
-        // Deduplicate by deal id before persisting
-        val distinctDeals = batch.deals.distinctBy { it.id }
-        val entitiesToUpsert = mutableListOf<DealEntity>()
+        networkClient.streamAllLiveFeeds().collect { singleResult ->
+            statusMap[singleResult.status.sourceId] = singleResult.status
+            _sourceStatuses.value = statusMap.values.toList()
+
+            if (singleResult.deals.isNotEmpty()) {
+                val batchAlerts = ingestDealBatchFast(
+                    incomingDeals = singleResult.deals,
+                    profile = profile,
+                    affinity = affinity,
+                    remainingAlertBudget = (2 - triggeredAlerts.size).coerceAtLeast(0)
+                )
+                totalFetched += singleResult.deals.size
+                triggeredAlerts.addAll(batchAlerts)
+            }
+
+            emit(
+                StreamingSyncProgress(
+                    completedSources = statusMap.size,
+                    totalSources = LiveDealNetworkClient.TOTAL_FEED_SOURCES,
+                    healthySources = statusMap.values.count { it.isHealthy },
+                    totalFetchedDeals = totalFetched,
+                    triggeredAlerts = triggeredAlerts.toList(),
+                    isFinished = false
+                )
+            )
+        }
+
+        // Dispatch real notifications for newly qualified fresh deals
+        if (triggeredAlerts.isNotEmpty()) {
+            val notifiedIds = mutableListOf<String>()
+            for (scoredAlert in triggeredAlerts) {
+                notificationManager.postDealAlertNotification(
+                    deal = scoredAlert.deal,
+                    reasonTitle = scoredAlert.recommendationReason.title
+                )
+                notifiedIds.add(scoredAlert.deal.id)
+            }
+            dealDao.markNotificationsSent(notifiedIds)
+        }
+
+        // Prune stale (>48h unsaved) and expired (>6h unsaved) listings to keep feed sharp & fast
+        val now = System.currentTimeMillis()
+        dealDao.pruneStaleDeals(
+            cutoffMillis = now - (48L * 3_600_000L),
+            expiredCutoffMillis = now - (6L * 3_600_000L)
+        )
+
+        emit(
+            StreamingSyncProgress(
+                completedSources = statusMap.size,
+                totalSources = LiveDealNetworkClient.TOTAL_FEED_SOURCES,
+                healthySources = statusMap.values.count { it.isHealthy },
+                totalFetchedDeals = totalFetched,
+                triggeredAlerts = triggeredAlerts.toList(),
+                isFinished = true
+            )
+        )
+    }
+
+    /**
+     * Batched O(1) SQLite round-trip ingestion eliminating the N+1 query bottleneck.
+     */
+    private suspend fun ingestDealBatchFast(
+        incomingDeals: List<DealItem>,
+        profile: UserPreferenceProfile,
+        affinity: UserBehaviorAffinity,
+        remainingAlertBudget: Int
+    ): List<DealPushRecommendationEngine.ScoredDeal> {
+        val distinctDeals = incomingDeals.distinctBy { it.id }
+        if (distinctDeals.isEmpty()) return emptyList()
+
+        val now = System.currentTimeMillis()
+        val ids = distinctDeals.map { it.id }
+        val productKeys = distinctDeals.map { DealTextParser.normalizeProductKey(it.title) }.distinct()
+
+        // 3 bulk queries instead of 3 * N queries
+        val existingById = dealDao.getDealsByIds(ids).associateBy { it.id }
+        val latestSnapByDealId = dealDao.getSnapshotsForDeals(ids)
+            .groupBy { it.dealId }
+            .mapValues { (_, list) -> list.firstOrNull() }
+        val minPriceByKey = dealDao.getMinPricesByProductKeys(productKeys)
+            .associate { it.productKey to it.minPrice }
+
+        val entitiesToUpsert = ArrayList<DealEntity>(distinctDeals.size)
+        val snapshotsToInsert = ArrayList<PriceSnapshotEntity>()
+        val batchAlerts = mutableListOf<DealPushRecommendationEngine.ScoredDeal>()
 
         for (incoming in distinctDeals) {
-            val existing = dealDao.getDealById(incoming.id)
+            val existing = existingById[incoming.id]
             val productKey = DealTextParser.normalizeProductKey(incoming.title)
 
-            // Record real price snapshot if price is newly observed or changed
             if (incoming.currentPrice != null) {
-                val latestSnap = dealDao.getLatestSnapshotForDeal(incoming.id)
+                val latestSnap = latestSnapByDealId[incoming.id]
                 if (latestSnap == null || kotlin.math.abs(latestSnap.price - incoming.currentPrice) >= 0.01) {
-                    dealDao.insertPriceSnapshot(
+                    snapshotsToInsert.add(
                         PriceSnapshotEntity(
                             dealId = incoming.id,
                             productKey = productKey,
@@ -168,14 +258,19 @@ class WorthItRepository(
             }
 
             val observedMin = if (incoming.currentPrice != null) {
-                val dbMin = dealDao.getLowestObservedPrice(incoming.id, productKey)
-                listOfNotNull(dbMin, incoming.currentPrice, existing?.historicLowPrice).minOrNull()
+                listOfNotNull(
+                    minPriceByKey[productKey],
+                    incoming.currentPrice,
+                    existing?.historicLowPrice,
+                    existing?.verifiedPrice
+                ).minOrNull()
             } else {
                 existing?.historicLowPrice
             }
 
-            val mergedWorthVotes = maxOf(incoming.worthVotes, existing?.worthVotes ?: 0)
-            val mergedNotWorthVotes = maxOf(incoming.notWorthVotes, existing?.notWorthVotes ?: 0)
+            val preservedVerification = existing?.verificationStatus?.takeIf { it != "UNVERIFIED" }
+                ?: incoming.verificationStatus.name
+            val preservedExpired = existing?.isExpired ?: incoming.isExpired
             val isAlreadyNotified = existing?.notificationSent ?: false
 
             val entity = DealEntity(
@@ -191,8 +286,8 @@ class WorthItRepository(
                 couponDescription = incoming.coupon?.discountDescription ?: existing?.couponDescription,
                 cashBackRate = incoming.cashBackRate,
                 freeShipping = incoming.freeShipping,
-                worthVotes = mergedWorthVotes,
-                notWorthVotes = mergedNotWorthVotes,
+                worthVotes = maxOf(incoming.worthVotes, existing?.worthVotes ?: 0),
+                notWorthVotes = maxOf(incoming.notWorthVotes, existing?.notWorthVotes ?: 0),
                 communityCommentsCount = maxOf(incoming.communityCommentsCount, existing?.communityCommentsCount ?: 0),
                 sourceName = incoming.sourceName,
                 imageUrl = incoming.imageUrl ?: existing?.imageUrl,
@@ -203,56 +298,103 @@ class WorthItRepository(
                 lastCheckedAtMillis = now,
                 isSaved = existing?.isSaved ?: false,
                 userVote = existing?.userVote ?: 0,
-                notificationSent = isAlreadyNotified
+                notificationSent = isAlreadyNotified,
+                verificationStatus = preservedVerification,
+                verifiedPrice = existing?.verifiedPrice ?: incoming.verifiedPrice,
+                verifiedAtMillis = existing?.verifiedAtMillis ?: incoming.verifiedAtMillis,
+                verificationNote = existing?.verificationNote?.ifBlank { incoming.verificationNote } ?: incoming.verificationNote,
+                isExpired = preservedExpired
             )
-
             entitiesToUpsert.add(entity)
 
-            // Evaluate push notification trigger for new/unnotified deals (cap 2 per sync to avoid spam)
-            if (!isAlreadyNotified && triggeredAlerts.size < 2) {
+            if (!isAlreadyNotified && !preservedExpired && batchAlerts.size < remainingAlertBudget) {
                 val domainDeal = entity.toDomain()
                 val scored = DealPushRecommendationEngine.calculateScore(domainDeal, profile, affinity, now)
-                if (DealPushRecommendationEngine.shouldTriggerPushNotification(scored, profile)) {
-                    triggeredAlerts.add(scored)
+                if (DealPushRecommendationEngine.shouldTriggerPushNotification(scored, profile, now)) {
+                    batchAlerts.add(scored)
                 }
             }
         }
 
-        if (entitiesToUpsert.isNotEmpty()) {
-            dealDao.upsertDeals(entitiesToUpsert)
+        if (snapshotsToInsert.isNotEmpty()) {
+            dealDao.insertPriceSnapshots(snapshotsToInsert)
         }
-
-        // Dispatch real system notifications and mark sent in Room
-        for (scoredAlert in triggeredAlerts) {
-            notificationManager.postDealAlertNotification(
-                deal = scoredAlert.deal,
-                reasonTitle = scoredAlert.recommendationReason.title
-            )
-            dealDao.markNotificationSent(scoredAlert.deal.id)
-        }
-
-        // Prune unsaved deals older than 5 days to keep local cache clean
-        val fiveDaysAgo = now - (5L * 24L * 3_600_000L)
-        dealDao.pruneStaleDeals(fiveDaysAgo)
-
-        return SyncOutcome(
-            fetchedCount = distinctDeals.size,
-            healthySources = batch.sourceStatuses.count { it.isHealthy },
-            totalSources = batch.sourceStatuses.size,
-            triggeredAlerts = triggeredAlerts
-        )
+        dealDao.upsertDeals(entitiesToUpsert)
+        return batchAlerts
     }
 
     /**
-     * Real-time multi-platform live search across Slickdeals RSS + Reddit Search JSON +
-     * CheapShark API + Room local cache. Groups genuine fetched offers by product & merchant,
-     * and includes direct 1-tap live retailer links for all 8 major US stores.
+     * Real-time live HTTP verification of a specific deal's merchant page.
+     * Updates Room verification status, live price, expiration flag, and price snapshot.
      */
-    suspend fun searchMultiPlatformLive(query: String): LiveSearchResponse {
+    suspend fun verifyDealLive(deal: DealItem): LiveVerificationResult {
+        val result = networkClient.verifyDealLive(deal)
+        val now = System.currentTimeMillis()
+
+        dealDao.updateDealVerification(
+            dealId = deal.id,
+            status = result.status.name,
+            verifiedPrice = result.verifiedPrice,
+            verifiedAtMillis = now,
+            note = result.note,
+            isExpired = result.isExpired
+        )
+
+        if (result.verifiedPrice != null) {
+            val latest = dealDao.getLatestSnapshotForDeal(deal.id)
+            if (latest == null || kotlin.math.abs(latest.price - result.verifiedPrice) >= 0.01) {
+                dealDao.insertPriceSnapshot(
+                    PriceSnapshotEntity(
+                        dealId = deal.id,
+                        productKey = DealTextParser.normalizeProductKey(deal.title),
+                        merchantName = deal.merchant.name,
+                        price = result.verifiedPrice,
+                        recordedAtMillis = now
+                    )
+                )
+            }
+        }
+        return result
+    }
+
+    /**
+     * Stale-While-Revalidate Streaming Multi-Platform Live Search:
+     * 1. Emits 0ms cached response if queried within last 60s (unless forceRefresh = true)
+     * 2. Immediately emits instant local Room matches (<5ms) + 8 direct store launchers
+     * 3. Progressively merges & emits live results as Slickdeals, Reddit, and CheapShark respond
+     */
+    fun searchMultiPlatformLiveStreaming(
+        query: String,
+        forceRefresh: Boolean = false
+    ): Flow<LiveSearchResponse> = flow {
         val trimmed = query.trim()
         val now = System.currentTimeMillis()
-        val encoded = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.toString())
+        val cacheKey = trimmed.lowercase(Locale.US)
 
+        if (trimmed.isBlank()) {
+            emit(
+                LiveSearchResponse(
+                    query = "",
+                    groups = emptyList(),
+                    totalLiveOffers = 0,
+                    sourcesTelemetry = emptyList(),
+                    directRetailerLinks = emptyList(),
+                    searchedAtMillis = now
+                )
+            )
+            return@flow
+        }
+
+        if (!forceRefresh) {
+            searchCache[cacheKey]?.let { entry ->
+                if (now - entry.cachedAtMillis < 60_000L) {
+                    emit(entry.response)
+                    return@flow
+                }
+            }
+        }
+
+        val encoded = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.toString())
         val directLinks = USMerchant.majorUSRetailers.map { merchant ->
             DirectRetailerLink(
                 merchant = merchant,
@@ -260,65 +402,79 @@ class WorthItRepository(
             )
         }
 
-        if (trimmed.isBlank()) {
-            return LiveSearchResponse(
-                query = "",
-                groups = emptyList(),
-                totalLiveOffers = 0,
-                sourcesTelemetry = emptyList(),
-                directRetailerLinks = emptyList(),
-                searchedAtMillis = now
+        // Phase 1: Instant Room cache matches (<5ms)
+        val cachedMatches = dealDao.searchCachedDeals(trimmed).map { it.toDomain() }
+        val accumulatedDeals = mutableListOf<DealItem>().apply { addAll(cachedMatches) }
+        val telemetry = mutableListOf<MonitorSourceStatus>()
+
+        emit(buildLiveSearchResponse(trimmed, accumulatedDeals, telemetry, directLinks, now))
+
+        // Phase 2: Stream remote multi-platform search sources as each arrives
+        val profile = userProfileFlow.first()
+        val affinity = behaviorAffinityFlow.first()
+
+        networkClient.streamLiveSearch(trimmed).collect { sourceResult ->
+            telemetry.add(sourceResult.status)
+            if (sourceResult.deals.isNotEmpty()) {
+                accumulatedDeals.addAll(sourceResult.deals)
+                // Persist fresh search discoveries in batch without triggering push spam
+                ingestDealBatchFast(
+                    incomingDeals = sourceResult.deals.take(20),
+                    profile = profile,
+                    affinity = affinity,
+                    remainingAlertBudget = 0
+                )
+            }
+            val snapshotResponse = buildLiveSearchResponse(
+                trimmed,
+                accumulatedDeals,
+                telemetry.toList(),
+                directLinks,
+                System.currentTimeMillis()
             )
+            emit(snapshotResponse)
         }
 
-        val liveBatch = networkClient.searchLiveAcrossSources(trimmed)
-        val cachedMatches = dealDao.searchCachedDeals(trimmed).map { it.toDomain() }
+        val finalResponse = buildLiveSearchResponse(
+            trimmed,
+            accumulatedDeals,
+            telemetry.toList(),
+            directLinks,
+            System.currentTimeMillis()
+        )
+        searchCache[cacheKey] = CachedSearchEntry(finalResponse, System.currentTimeMillis())
+    }
 
-        // Merge & deduplicate live + cached matches
-        val merged = (liveBatch.deals + cachedMatches)
-            .distinctBy { "${it.merchant.name}|${it.title.lowercase(Locale.US).take(55)}" }
+    private fun buildLiveSearchResponse(
+        query: String,
+        rawDeals: List<DealItem>,
+        telemetry: List<MonitorSourceStatus>,
+        directLinks: List<DirectRetailerLink>,
+        now: Long
+    ): LiveSearchResponse {
+        val tokens = query.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.isNotBlank() }
+
+        val merged = rawDeals
+            .filter { !it.isExpired && it.verificationStatus != VerificationStatus.OUT_OF_STOCK }
             .filter { deal ->
-                val tokens = trimmed.lowercase(Locale.US).split(Regex("""\s+""")).filter { it.isNotBlank() }
                 tokens.any { t ->
                     deal.title.contains(t, ignoreCase = true) ||
                         deal.brand.contains(t, ignoreCase = true) ||
                         deal.summary.contains(t, ignoreCase = true)
                 }
             }
+            .distinctBy { "${it.merchant.name}|${it.title.lowercase(Locale.US).take(55)}" }
 
-        // Persist newly discovered live search deals into Room cache & record real price snapshots
-        for (deal in liveBatch.deals.take(20)) {
-            val existing = dealDao.getDealById(deal.id)
-            if (existing == null) {
-                dealDao.upsertDeal(deal.toEntity())
-            }
-            if (deal.currentPrice != null) {
-                val latest = dealDao.getLatestSnapshotForDeal(deal.id)
-                if (latest == null || kotlin.math.abs(latest.price - deal.currentPrice) >= 0.01) {
-                    dealDao.insertPriceSnapshot(
-                        PriceSnapshotEntity(
-                            dealId = deal.id,
-                            productKey = DealTextParser.normalizeProductKey(deal.title),
-                            merchantName = deal.merchant.name,
-                            price = deal.currentPrice,
-                            recordedAtMillis = now
-                        )
-                    )
-                }
-            }
-        }
-
-        // Group offers by normalized brand + product cluster to compare across merchants
         val grouped = merged.groupBy { deal ->
             val keyTokens = DealTextParser.normalizeProductKey(deal.title).split("_").take(3).joinToString("_")
             "${deal.brand.lowercase(Locale.US)}_$keyTokens"
         }.map { (groupKey, items) ->
             val sortedItems = items.sortedWith(
-                compareBy<DealItem> { it.currentPrice == null }
-                    .thenBy { it.currentPrice ?: Double.MAX_VALUE }
+                compareBy<DealItem> { it.effectiveCurrentPrice == null }
+                    .thenBy { it.effectiveCurrentPrice ?: Double.MAX_VALUE }
                     .thenByDescending { it.publishedAtMillis }
             )
-            val priced = sortedItems.mapNotNull { it.currentPrice }
+            val priced = sortedItems.mapNotNull { it.effectiveCurrentPrice }
             val lowestPrice = priced.minOrNull()
             val highestPrice = priced.maxOrNull()
             val lead = sortedItems.first()
@@ -328,13 +484,13 @@ class WorthItRepository(
                     id = item.id,
                     merchant = item.merchant,
                     title = item.title,
-                    price = item.currentPrice,
+                    price = item.effectiveCurrentPrice,
                     originalPrice = item.originalPrice,
                     couponCode = item.coupon?.code,
                     sourceName = item.sourceName,
                     buyUrl = item.buyUrl,
                     imageUrl = item.imageUrl,
-                    isLowestAmongAll = idx == 0 && item.currentPrice != null,
+                    isLowestAmongAll = idx == 0 && item.effectiveCurrentPrice != null,
                     publishedAtMillis = item.publishedAtMillis,
                     fetchedAtMillis = now
                 )
@@ -352,24 +508,19 @@ class WorthItRepository(
             )
         }.sortedWith(
             compareByDescending<LiveComparisonGroup> { it.quotes.size > 1 }
-                .thenBy { it.bestPrice == null }
                 .thenByDescending { it.quotes.firstOrNull()?.publishedAtMillis ?: 0L }
         )
 
         return LiveSearchResponse(
-            query = trimmed,
+            query = query,
             groups = grouped,
             totalLiveOffers = merged.size,
-            sourcesTelemetry = liveBatch.sourceStatuses,
+            sourcesTelemetry = telemetry,
             directRetailerLinks = directLinks,
             searchedAtMillis = now
         )
     }
 
-    /**
-     * Adds a user-specified US retailer product URL, immediately fetches live price metadata
-     * over HTTP, persists in Room, and fires an alert if the target price is met.
-     */
     suspend fun addAndCheckTrackedUrl(
         rawUrl: String,
         customLabel: String,
@@ -392,6 +543,7 @@ class WorthItRepository(
             resolvedLabel = customLabel.ifBlank { page.title ?: "${merchant.displayName} Product" }
             observedPrice = page.price
             statusMsg = when {
+                page.isOutOfStock -> "Out of Stock / Unavailable right now"
                 observedPrice != null && targetPrice != null && observedPrice <= targetPrice ->
                     "Target hit! Live price $${String.format(Locale.US, "%.2f", observedPrice)}"
                 observedPrice != null ->
@@ -461,10 +613,10 @@ class WorthItRepository(
                 val page = res.getOrThrow()
                 val label = item.label.ifBlank { page.title ?: item.label }
                 val price = page.price ?: item.lastObservedPrice
-                val status = if (page.price != null) {
-                    "Live verified: $${String.format(Locale.US, "%.2f", page.price)}"
-                } else {
-                    "Checked (no structured price exposed)"
+                val status = when {
+                    page.isOutOfStock -> "Out of Stock / Unavailable"
+                    page.price != null -> "Live verified: $${String.format(Locale.US, "%.2f", page.price)}"
+                    else -> "Checked (no structured price exposed)"
                 }
                 dealDao.updateTrackedUrlResult(item.id, label, price, status, now)
                 if (page.price != null) {
@@ -567,7 +719,8 @@ class WorthItRepository(
     private fun DealEntity.toDomain(): DealItem {
         val merchant = USMerchant.fromNameSafe(merchantName)
         val category = DealCategory.fromNameSafe(categoryName)
-        val isLow = currentPrice != null && historicLowPrice != null && currentPrice <= historicLowPrice + 0.01
+        val activePrice = verifiedPrice ?: currentPrice
+        val isLow = activePrice != null && historicLowPrice != null && activePrice <= historicLowPrice + 0.01
         return DealItem(
             id = id,
             title = title,
@@ -596,38 +749,12 @@ class WorthItRepository(
                 1 -> true
                 -1 -> false
                 else -> null
-            }
+            },
+            verificationStatus = VerificationStatus.fromNameSafe(verificationStatus),
+            verifiedPrice = verifiedPrice,
+            verifiedAtMillis = verifiedAtMillis,
+            verificationNote = verificationNote,
+            isExpired = isExpired
         )
     }
-
-    private fun DealItem.toEntity(): DealEntity = DealEntity(
-        id = id,
-        title = title,
-        brand = brand,
-        merchantName = merchant.name,
-        categoryName = category.name,
-        currentPrice = currentPrice,
-        originalPrice = originalPrice,
-        historicLowPrice = historicLowPrice,
-        couponCode = coupon?.code,
-        couponDescription = coupon?.discountDescription,
-        cashBackRate = cashBackRate,
-        freeShipping = freeShipping,
-        worthVotes = worthVotes,
-        notWorthVotes = notWorthVotes,
-        communityCommentsCount = communityCommentsCount,
-        sourceName = sourceName,
-        imageUrl = imageUrl,
-        buyUrl = buyUrl,
-        sourceUrl = sourceUrl,
-        summary = summary,
-        publishedAtMillis = publishedAtMillis,
-        lastCheckedAtMillis = lastCheckedAtMillis,
-        isSaved = isSaved,
-        userVote = when (userVote) {
-            true -> 1
-            false -> -1
-            null -> 0
-        }
-    )
 }

@@ -18,7 +18,8 @@ data class ParsedProductPage(
     val price: Double?,
     val originalPrice: Double?,
     val imageUrl: String?,
-    val availability: String?
+    val availability: String?,
+    val isOutOfStock: Boolean = false
 )
 
 /**
@@ -383,13 +384,52 @@ object DealTextParser {
             price = jsonPriceRegex.find(html)?.groupValues?.get(1)?.toDoubleOrNull()?.takeIf { it > 0.5 }
         }
 
+        val cleanAvailability = availability?.substringAfterLast("/")
+        val htmlLowerSnippet = html.take(120_000).lowercase(Locale.US)
+        val availLower = cleanAvailability?.lowercase(Locale.US).orEmpty()
+        val isOos = availLower.contains("outofstock") ||
+            availLower.contains("soldout") ||
+            availLower.contains("discontinued") ||
+            htmlLowerSnippet.contains("\"availability\":\"https://schema.org/outofstock\"") ||
+            htmlLowerSnippet.contains("\"availability\":\"http://schema.org/outofstock\"") ||
+            htmlLowerSnippet.contains("currently unavailable.") ||
+            htmlLowerSnippet.contains("we don't know when or if this item will be back in stock") ||
+            (price == null && (htmlLowerSnippet.contains(">sold out<") || htmlLowerSnippet.contains(">out of stock<")))
+
         return ParsedProductPage(
             title = title?.take(180),
             price = price,
             originalPrice = originalPrice,
             imageUrl = imageUrl,
-            availability = availability?.substringAfterLast("/")
+            availability = cleanAvailability,
+            isOutOfStock = isOos
         )
+    }
+
+    /**
+     * Detects explicit expiration or out-of-stock markers in US deal posts so dead
+     * flash deals are excluded before wasting user attention.
+     */
+    fun isDealMarkedExpiredOrOos(title: String, description: String = "", flair: String = ""): Boolean {
+        val f = flair.trim().lowercase(Locale.US)
+        if (f == "expired" || f == "oos" || f == "dead" || f == "sold out" || f == "out of stock") {
+            return true
+        }
+        val t = "$title $f".lowercase(Locale.US)
+        val d = stripHtml(description).take(220).lowercase(Locale.US)
+        val titleMarkers = listOf(
+            "[expired]", "(expired)", "expired:", "expired -", "deal expired",
+            "[oos]", "(oos)", " oos", "out of stock", "sold out",
+            "[dead]", "(dead)", "dead deal", "deal ended", "price back up",
+            "back to regular price", "no longer available"
+        )
+        if (titleMarkers.any { t.contains(it) }) return true
+        val descMarkers = listOf(
+            "deal has expired", "deal is now expired", "deal expired",
+            "currently out of stock", "now out of stock", "sold out at"
+        )
+        if (descMarkers.any { d.contains(it) }) return true
+        return false
     }
 
     private fun extractFromJsonLdBlock(rawJson: String): ParsedProductPage {

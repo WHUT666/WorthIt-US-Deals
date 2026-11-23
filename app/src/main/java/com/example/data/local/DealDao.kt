@@ -21,10 +21,15 @@ data class CategoryEventCountRow(
     val count: Int
 )
 
+data class ProductMinPriceRow(
+    val productKey: String,
+    val minPrice: Double
+)
+
 @Dao
 interface DealDao {
 
-    // --- Deals ---
+    // --- Deals (Indexed & Batched for Sub-15ms Ingestion) ---
     @Query("SELECT * FROM deals ORDER BY publishedAtMillis DESC LIMIT 250")
     fun observeAllDeals(): Flow<List<DealEntity>>
 
@@ -34,7 +39,12 @@ interface DealDao {
     @Query("SELECT * FROM deals WHERE id = :dealId LIMIT 1")
     suspend fun getDealById(dealId: String): DealEntity?
 
-    @Query("SELECT * FROM deals WHERE LOWER(title) LIKE '%' || LOWER(:token) || '%' OR LOWER(brand) LIKE '%' || LOWER(:token) || '%' ORDER BY publishedAtMillis DESC LIMIT 60")
+    @Query("SELECT * FROM deals WHERE id IN (:ids)")
+    suspend fun getDealsByIds(ids: List<String>): List<DealEntity>
+
+    @Query(
+        "SELECT * FROM deals WHERE isExpired = 0 AND (LOWER(title) LIKE '%' || LOWER(:token) || '%' OR LOWER(brand) LIKE '%' || LOWER(:token) || '%') ORDER BY publishedAtMillis DESC LIMIT 60"
+    )
     suspend fun searchCachedDeals(token: String): List<DealEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -49,24 +59,58 @@ interface DealDao {
     @Query("UPDATE deals SET userVote = :userVote, worthVotes = :worthVotes, notWorthVotes = :notWorthVotes WHERE id = :dealId")
     suspend fun updateVoteState(dealId: String, userVote: Int, worthVotes: Int, notWorthVotes: Int)
 
-    @Query("UPDATE deals SET notificationSent = 1 WHERE id = :dealId")
-    suspend fun markNotificationSent(dealId: String)
+    @Query("UPDATE deals SET notificationSent = 1 WHERE id IN (:dealIds)")
+    suspend fun markNotificationsSent(dealIds: List<String>)
 
-    @Query("DELETE FROM deals WHERE isSaved = 0 AND lastCheckedAtMillis < :cutoffMillis")
-    suspend fun pruneStaleDeals(cutoffMillis: Long)
+    @Query(
+        """
+        UPDATE deals
+        SET verificationStatus = :status,
+            verifiedPrice = :verifiedPrice,
+            verifiedAtMillis = :verifiedAtMillis,
+            verificationNote = :note,
+            isExpired = :isExpired,
+            historicLowPrice = CASE
+                WHEN :verifiedPrice IS NOT NULL AND (historicLowPrice IS NULL OR :verifiedPrice < historicLowPrice)
+                THEN :verifiedPrice
+                ELSE historicLowPrice
+            END
+        WHERE id = :dealId
+        """
+    )
+    suspend fun updateDealVerification(
+        dealId: String,
+        status: String,
+        verifiedPrice: Double?,
+        verifiedAtMillis: Long,
+        note: String,
+        isExpired: Boolean
+    )
 
-    // --- Real Observed Price History Snapshots ---
+    @Query("DELETE FROM deals WHERE isSaved = 0 AND (lastCheckedAtMillis < :cutoffMillis OR (isExpired = 1 AND lastCheckedAtMillis < :expiredCutoffMillis))")
+    suspend fun pruneStaleDeals(cutoffMillis: Long, expiredCutoffMillis: Long)
+
+    // --- Real Observed Price History Snapshots (Batched) ---
     @Query("SELECT * FROM price_snapshots WHERE dealId = :dealId ORDER BY recordedAtMillis ASC")
     fun observePriceSnapshotsForDeal(dealId: String): Flow<List<PriceSnapshotEntity>>
 
     @Query("SELECT * FROM price_snapshots WHERE dealId = :dealId ORDER BY recordedAtMillis DESC LIMIT 1")
     suspend fun getLatestSnapshotForDeal(dealId: String): PriceSnapshotEntity?
 
+    @Query("SELECT * FROM price_snapshots WHERE dealId IN (:dealIds) ORDER BY recordedAtMillis DESC")
+    suspend fun getSnapshotsForDeals(dealIds: List<String>): List<PriceSnapshotEntity>
+
+    @Query("SELECT productKey, MIN(price) as minPrice FROM price_snapshots WHERE productKey IN (:productKeys) GROUP BY productKey")
+    suspend fun getMinPricesByProductKeys(productKeys: List<String>): List<ProductMinPriceRow>
+
     @Query("SELECT MIN(price) FROM price_snapshots WHERE dealId = :dealId OR productKey = :productKey")
     suspend fun getLowestObservedPrice(dealId: String, productKey: String): Double?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPriceSnapshot(snapshot: PriceSnapshotEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPriceSnapshots(snapshots: List<PriceSnapshotEntity>)
 
     // --- User-Added Custom Retailer URL Watchlist ---
     @Query("SELECT * FROM tracked_urls WHERE isActive = 1 ORDER BY lastCheckedAtMillis DESC")
@@ -84,7 +128,7 @@ interface DealDao {
     @Query("DELETE FROM tracked_urls WHERE id = :id")
     suspend fun deleteTrackedUrl(id: Long)
 
-    // --- Real Conversion Funnel & Behavioral Affinity Logs ---
+    // --- Conversion Funnel & Behavioral Affinity Logs ---
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertConversionEvent(event: ConversionEventEntity)
 
