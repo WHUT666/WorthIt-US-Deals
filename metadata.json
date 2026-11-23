@@ -1,0 +1,6 @@
+{
+  "name": "WorthIt US Deals",
+  "description": "US Deals radar & shopping advisor. Real-time multi-merchant monitoring (Amazon, Best Buy, Walmart, Target, etc.), smart algorithmic discount scoring, and frictionless checkout optimization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
