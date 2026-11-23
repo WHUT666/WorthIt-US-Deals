@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Minimalist tilted price tag with sculpted lightning spark cutout for Android 13+ themed icons -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M43,31 L58,31 C60.5,31 62.8,32 64.5,33.7 L76.3,45.5 C79.8,49 79.8,54.7 76.3,58.2 L61.2,73.3 C57.7,76.8 52,76.8 48.5,73.3 L36.7,61.5 C35,59.8 34,57.5 34,55 L34,40 C34,35 38,31 43,31 Z M45,42 A3.5,3.5 0 1,0 45,49 A3.5,3.5 0 1,0 45,42 Z M58,47 L49,57.5 L55.5,57.5 L53.5,66 L63.5,54.5 L57,54.5 Z" />
+</vector>

@@ -10,10 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.algorithm.DealPushRecommendationEngine
 import com.example.ui.components.DealCard
+import com.example.ui.icons.WorthItIcons
+import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.copyTextToClipboard
 import com.example.ui.util.openSafeExternalUrl
 import com.example.viewmodel.DealRadarViewModel
@@ -36,6 +39,7 @@ fun SavedDealsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val ext = WorthItTheme.extendedColors
     val savedDeals by viewModel.savedDeals.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val behaviorAffinity by viewModel.behaviorAffinity.collectAsStateWithLifecycle()
@@ -67,12 +71,21 @@ fun SavedDealsScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Outlined.BookmarkBorder,
-                        contentDescription = null,
-                        modifier = Modifier.size(54.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(0.5.dp, ext.hairline),
+                        modifier = Modifier.size(72.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = WorthItIcons.BookmarkOutlined,
+                                contentDescription = null,
+                                modifier = Modifier.size(34.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "No saved deals yet",

@@ -1,22 +1,8 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Tag base shape centered in 66dp inner zone (30..78) -->
-    <path
-        android:fillColor="#FF3355"
-        android:pathData="M54,26 L74,46 C75.5,47.5 76,49.5 76,51.5 L76,76 C76,79.3 73.3,82 70,82 L38,82 C34.7,82 32,79.3 32,76 L32,51.5 C32,49.5 32.5,47.5 34,46 Z" />
-    <!-- Tag perforation hole -->
-    <path
-        android:fillColor="#0D1117"
-        android:pathData="M54,34 A4,4 0 1,0 54,42 A4,4 0 1,0 54,34 Z" />
-    <!-- Radar Waves / Lightning Bolt inside tag -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M56,48 L44,63 L53,63 L51,74 L64,58 L55,58 Z" />
-    <!-- Sparkle / Star of Best Value -->
-    <path
-        android:fillColor="#FFD166"
-        android:pathData="M68,36 L70,41 L75,43 L70,45 L68,50 L66,45 L61,43 L66,41 Z" />
-</vector>
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="66dp"
+        android:height="66dp"
+        android:drawable="@drawable/worthit_apple_icon_1795419429060"
+        android:gravity="center" />
+</layer-list>

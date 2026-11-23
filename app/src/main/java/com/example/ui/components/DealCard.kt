@@ -16,16 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.ConfirmationNumber
-import androidx.compose.material.icons.filled.LocalOffer
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,6 +45,7 @@ import com.example.algorithm.DealPushRecommendationEngine
 import com.example.model.FreshnessTier
 import com.example.model.USMerchant
 import com.example.model.VerificationStatus
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.formatMoney
 import com.example.ui.util.formatRelativeTime
@@ -134,7 +126,7 @@ fun DealCard(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Bolt,
+                            imageVector = if (scoredDeal.matchesWatchedKeyword) WorthItIcons.FlashBolt else WorthItIcons.Sparkles,
                             contentDescription = null,
                             tint = if (scoredDeal.matchesWatchedKeyword) ext.warning else MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(14.dp)
@@ -163,10 +155,10 @@ fun DealCard(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Verified,
+                                        imageVector = WorthItIcons.VerifiedShield,
                                         contentDescription = "Verified live",
                                         tint = ext.success,
-                                        modifier = Modifier.size(12.dp)
+                                        modifier = Modifier.size(13.dp)
                                     )
                                     Spacer(modifier = Modifier.width(3.dp))
                                     Text(
@@ -228,9 +220,10 @@ fun DealCard(
                         .testTag("bookmark_btn_${deal.id}")
                 ) {
                     Icon(
-                        imageVector = if (deal.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        imageVector = if (deal.isSaved) WorthItIcons.BookmarkFilled else WorthItIcons.BookmarkOutlined,
                         contentDescription = if (deal.isSaved) "Remove saved deal" else "Save deal",
-                        tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -259,7 +252,7 @@ fun DealCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.LocalOffer,
+                            imageVector = WorthItIcons.DealsOutlined,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(28.dp)
@@ -394,10 +387,10 @@ fun DealCard(
                             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ConfirmationNumber,
+                                imageVector = WorthItIcons.CouponTicket,
                                 contentDescription = null,
                                 tint = ext.coupon,
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
@@ -432,16 +425,17 @@ fun DealCard(
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = if (deal.userVote == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                         ),
+                        shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .testTag("vote_worth_${deal.id}")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ThumbUp,
+                            imageVector = if (deal.userVote == true) WorthItIcons.ThumbUpFilled else WorthItIcons.ThumbUpOutlined,
                             contentDescription = "Vote worth",
                             tint = if (deal.userVote == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
@@ -456,16 +450,17 @@ fun DealCard(
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = if (deal.userVote == false) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
                         ),
+                        shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .testTag("vote_not_worth_${deal.id}")
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.ThumbDown,
+                            imageVector = WorthItIcons.ThumbDownOutlined,
                             contentDescription = "Vote not worth",
                             tint = if (deal.userVote == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
@@ -479,7 +474,7 @@ fun DealCard(
                 Button(
                     onClick = onDirectCheckout,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                     modifier = Modifier
                         .minimumInteractiveComponentSize()
@@ -489,11 +484,11 @@ fun DealCard(
                         text = if (deal.coupon != null) "Clip & Go" else "Go to Deal",
                         style = MaterialTheme.typography.labelLarge
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        imageVector = WorthItIcons.ArrowUpRight,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }

@@ -20,22 +20,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Forum
-import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -74,6 +62,7 @@ import com.example.model.FreshnessTier
 import com.example.model.VerificationStatus
 import com.example.ui.components.MerchantBadge
 import com.example.ui.components.PriceHistoryChartCard
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.copyTextToClipboard
 import com.example.ui.util.formatMoney
@@ -116,7 +105,7 @@ fun DealDetailScreen(
                     title = { Text(deal.brand, maxLines = 1, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onBack, modifier = Modifier.testTag("detail_back_btn")) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(WorthItIcons.BackChevron, contentDescription = "Back", modifier = Modifier.size(22.dp))
                         }
                     },
                     actions = {
@@ -125,9 +114,10 @@ fun DealDetailScreen(
                             modifier = Modifier.testTag("detail_save_btn")
                         ) {
                             Icon(
-                                imageVector = if (deal.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                imageVector = if (deal.isSaved) WorthItIcons.BookmarkFilled else WorthItIcons.BookmarkOutlined,
                                 contentDescription = "Save deal",
-                                tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (deal.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(21.dp)
                             )
                         }
                         IconButton(
@@ -141,7 +131,7 @@ fun DealDetailScreen(
                             },
                             modifier = Modifier.testTag("detail_share_btn")
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "Share deal")
+                            Icon(WorthItIcons.ShareArrow, contentDescription = "Share deal", modifier = Modifier.size(20.dp))
                         }
                     }
                 )
@@ -201,7 +191,7 @@ fun DealDetailScreen(
                             style = MaterialTheme.typography.labelLarge
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(WorthItIcons.ArrowUpRight, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
                     }
                 }
@@ -394,7 +384,7 @@ fun DealDetailScreen(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
-                                        Icons.Default.ConfirmationNumber,
+                                        WorthItIcons.CouponTicket,
                                         contentDescription = null,
                                         tint = ext.coupon,
                                         modifier = Modifier.size(20.dp)
@@ -420,7 +410,7 @@ fun DealDetailScreen(
                                         viewModel.recordCouponCopy(deal.coupon.code, deal.id, deal.merchant, deal.category)
                                     }
                                 ) {
-                                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Icon(WorthItIcons.CopyLayers, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Copy")
                                 }
@@ -440,17 +430,19 @@ fun DealDetailScreen(
                 FilledTonalButton(
                     onClick = { viewModel.voteDeal(deal, true) },
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (deal.userVote == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = if (deal.userVote == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                     ),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
                         .testTag("detail_vote_worth")
                 ) {
                     Icon(
-                        Icons.Default.ThumbUp,
+                        imageVector = if (deal.userVote == true) WorthItIcons.ThumbUpFilled else WorthItIcons.ThumbUpOutlined,
                         contentDescription = null,
-                        tint = if (deal.userVote == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (deal.userVote == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Worth (${deal.worthVotes})")
@@ -459,17 +451,19 @@ fun DealDetailScreen(
                 FilledTonalButton(
                     onClick = { viewModel.voteDeal(deal, false) },
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (deal.userVote == false) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = if (deal.userVote == false) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface
                     ),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
                         .testTag("detail_vote_not_worth")
                 ) {
                     Icon(
-                        Icons.Outlined.ThumbDown,
+                        imageVector = WorthItIcons.ThumbDownOutlined,
                         contentDescription = null,
-                        tint = if (deal.userVote == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (deal.userVote == false) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Pass (${deal.notWorthVotes})")
@@ -490,14 +484,15 @@ fun DealDetailScreen(
             // Transparent DealRank 6-Factor Breakdown Card
             val bd = scoredDeal.recommendationReason.breakdown
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                border = BorderStroke(0.5.dp, ext.hairline),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Bolt, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Icon(WorthItIcons.Sparkles, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Why WorthIt Ranked This ${scoredDeal.compositeScore.toInt()}/100",
@@ -585,14 +580,14 @@ private fun LiveVerificationBannerCard(
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val icon = when (status) {
-        VerificationStatus.VERIFIED_LIVE -> Icons.Default.Verified
+        VerificationStatus.VERIFIED_LIVE -> WorthItIcons.VerifiedShield
         VerificationStatus.PRICE_INCREASED -> Icons.Default.Warning
         VerificationStatus.OUT_OF_STOCK -> Icons.Default.ErrorOutline
         else -> Icons.Default.CheckCircle
     }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         modifier = Modifier
             .fillMaxWidth()
@@ -658,7 +653,7 @@ private fun LiveVerificationBannerCard(
                     .testTag("reverify_deal_btn")
             ) {
                 Icon(
-                    imageVector = Icons.Default.Refresh,
+                    imageVector = WorthItIcons.SyncRefresh,
                     contentDescription = "Re-verify deal",
                     modifier = Modifier.size(15.dp)
                 )

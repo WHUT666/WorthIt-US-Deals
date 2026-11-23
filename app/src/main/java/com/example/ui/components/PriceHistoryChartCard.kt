@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +31,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.model.PricePoint
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.formatMoney
 
@@ -70,7 +70,7 @@ fun PriceHistoryChartCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ShowChart,
+                        imageVector = WorthItIcons.PriceChart,
                         contentDescription = "Observed price history",
                         tint = primaryColor,
                         modifier = Modifier.size(20.dp)

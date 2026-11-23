@@ -24,13 +24,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Analytics
-import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.AppThemeMode
 import com.example.model.DealCategory
 import com.example.model.USMerchant
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.viewmodel.DealRadarViewModel
 
@@ -141,9 +137,9 @@ fun AlgorithmProfileScreen(
                         AppThemeMode.entries.forEach { mode ->
                             val isSelected = userProfile.themeMode == mode
                             val modeIcon = when (mode) {
-                                AppThemeMode.LIGHT -> Icons.Default.LightMode
-                                AppThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
-                                AppThemeMode.DARK -> Icons.Default.DarkMode
+                                AppThemeMode.LIGHT -> WorthItIcons.SunMode
+                                AppThemeMode.SYSTEM -> WorthItIcons.AutoContrast
+                                AppThemeMode.DARK -> WorthItIcons.MoonMode
                             }
                             Surface(
                                 color = if (isSelected) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent,
@@ -201,7 +197,7 @@ fun AlgorithmProfileScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Default.Analytics,
+                            WorthItIcons.PriceChart,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.secondary,
                             modifier = Modifier.size(20.dp)
@@ -252,14 +248,14 @@ fun AlgorithmProfileScreen(
 
         // Algorithm Header
         Card(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Default.Tune,
+                        WorthItIcons.SlidersFilled,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
@@ -576,10 +572,12 @@ private fun ToggleCard(
     testTag: String,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val ext = WorthItTheme.extendedColors
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(0.5.dp, ext.hairline),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(

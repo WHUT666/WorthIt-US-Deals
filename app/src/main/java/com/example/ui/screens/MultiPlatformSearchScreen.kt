@@ -25,11 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,6 +55,7 @@ import com.example.data.network.LiveDealNetworkClient
 import com.example.model.DealCategory
 import com.example.model.DirectRetailerLink
 import com.example.ui.components.LiveProductComparisonCard
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.copyTextToClipboard
 import com.example.ui.util.openSafeExternalUrl
@@ -98,9 +95,10 @@ fun MultiPlatformSearchScreen(
                 placeholder = { Text("Search any SKU (5090, AirPods, SSD)...") },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Search,
+                        imageVector = WorthItIcons.SearchOutlined,
                         contentDescription = "Live search",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
                     )
                 },
                 trailingIcon = {
@@ -110,7 +108,7 @@ fun MultiPlatformSearchScreen(
                                 onClick = { viewModel.updatePlatformSearchQuery("") },
                                 modifier = Modifier.minimumInteractiveComponentSize()
                             ) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                                Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
                             }
                         }
                         IconButton(
@@ -124,9 +122,10 @@ fun MultiPlatformSearchScreen(
                                 .testTag("refresh_search_btn")
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Refresh,
+                                imageVector = WorthItIcons.SyncRefresh,
                                 contentDescription = "Run live search",
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -186,12 +185,21 @@ fun MultiPlatformSearchScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Storefront,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(48.dp)
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(0.5.dp, ext.hairline),
+                            modifier = Modifier.size(72.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = WorthItIcons.Storefront,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Real-Time Multi-Store Search",
@@ -304,9 +312,10 @@ fun MultiPlatformSearchScreen(
                         if (resp.groups.isEmpty() && !isSearching) {
                             item {
                                 Card(
-                                    shape = RoundedCornerShape(16.dp),
+                                    shape = RoundedCornerShape(20.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    border = BorderStroke(0.5.dp, ext.hairline),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
@@ -404,10 +413,10 @@ private fun DirectStoreLauncherCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                imageVector = WorthItIcons.ArrowUpRight,
                                 contentDescription = "Search ${link.merchant.displayName}",
                                 tint = brandColor,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }

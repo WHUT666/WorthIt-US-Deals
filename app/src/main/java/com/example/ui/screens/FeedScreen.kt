@@ -23,13 +23,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -58,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.DealCategory
 import com.example.ui.components.DealCard
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.copyTextToClipboard
 import com.example.ui.util.openSafeExternalUrl
@@ -106,9 +104,10 @@ fun FeedScreen(
                 placeholder = { Text("Filter live deals (e.g. 5090, OLED, Apple)...") },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Search,
+                        imageVector = WorthItIcons.SearchOutlined,
                         contentDescription = "Filter deals",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 },
                 trailingIcon = {
@@ -133,45 +132,57 @@ fun FeedScreen(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            IconButton(
-                onClick = { viewModel.syncLiveDealsNow() },
-                enabled = !isSyncing,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .background(MaterialTheme.colorScheme.surface, CircleShape)
-                    .testTag("feed_sync_btn")
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = CircleShape,
+                border = BorderStroke(0.5.dp, ext.hairline)
             ) {
-                if (isSyncing) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh live US feeds",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                IconButton(
+                    onClick = { viewModel.syncLiveDealsNow() },
+                    enabled = !isSyncing,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("feed_sync_btn")
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            imageVector = WorthItIcons.SyncRefresh,
+                            contentDescription = "Refresh live US feeds",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            IconButton(
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !viewModel.hasNotificationPermission()) {
-                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        viewModel.dispatchTopDealNotification()
-                    }
-                },
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                    .testTag("send_push_alert_btn")
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = CircleShape,
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
             ) {
-                Icon(
-                    imageVector = Icons.Default.NotificationsActive,
-                    contentDescription = "Dispatch top deal push alert",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                IconButton(
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !viewModel.hasNotificationPermission()) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            viewModel.dispatchTopDealNotification()
+                        }
+                    },
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("send_push_alert_btn")
+                ) {
+                    Icon(
+                        imageVector = WorthItIcons.BellAlert,
+                        contentDescription = "Dispatch top deal push alert",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -219,10 +230,10 @@ fun FeedScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Bolt,
+                        imageVector = WorthItIcons.FlashBolt,
                         contentDescription = null,
                         tint = ext.warning,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -322,9 +333,9 @@ fun FeedScreen(
                     onClick = { viewModel.toggleFreshOnlyFilter() },
                     leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.Bolt,
+                            imageVector = WorthItIcons.FlashBolt,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     },
                     label = {

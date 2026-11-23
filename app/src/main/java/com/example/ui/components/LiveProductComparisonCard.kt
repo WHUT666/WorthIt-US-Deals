@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
@@ -45,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.model.LiveComparisonGroup
 import com.example.model.MerchantPriceQuote
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.formatMoney
 import com.example.ui.util.formatRelativeTime
@@ -309,7 +309,7 @@ private fun MerchantQuoteRow(
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = onBuyClick,
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (quote.isLowestAmongAll) ext.success else MaterialTheme.colorScheme.primary
                     ),
@@ -319,9 +319,9 @@ private fun MerchantQuoteRow(
                     Text(text = "Visit", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.width(3.dp))
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        imageVector = WorthItIcons.ArrowUpRight,
                         contentDescription = "Open retailer",
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }

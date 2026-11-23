@@ -19,10 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.AddLink
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -53,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.USMerchant
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.theme.WorthItTheme
 import com.example.ui.util.formatMoney
 import com.example.ui.util.formatRelativeTime
@@ -98,7 +96,7 @@ fun RadarLiveScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(20.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -129,7 +127,7 @@ fun RadarLiveScreen(
                             if (isSyncing) {
                                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(WorthItIcons.SyncRefresh, contentDescription = null, modifier = Modifier.size(17.dp))
                             }
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Sync All")
@@ -162,17 +160,19 @@ fun RadarLiveScreen(
                     if (trackedUrls.isNotEmpty()) {
                         OutlinedButton(
                             onClick = { viewModel.refreshTrackedUrls() },
-                            enabled = !isCheckingUrl
+                            enabled = !isCheckingUrl,
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Text("Check")
                         }
                     }
                     Button(
                         onClick = { showAddUrlDialog = true },
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.testTag("add_url_watch_btn")
                     ) {
-                        Icon(Icons.Default.AddLink, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(WorthItIcons.LinkAdd, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text("Track URL")
                     }
                 }
@@ -210,9 +210,10 @@ fun RadarLiveScreen(
         if (trackedUrls.isEmpty()) {
             item {
                 Card(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    border = BorderStroke(0.5.dp, ext.hairline),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -233,14 +234,15 @@ fun RadarLiveScreen(
         } else {
             items(trackedUrls, key = { it.id }) { watch ->
                 Card(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (watch.isTargetHit) ext.successContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface
                     ),
                     border = BorderStroke(
-                        1.dp,
-                        if (watch.isTargetHit) ext.success else MaterialTheme.colorScheme.outlineVariant
+                        if (watch.isTargetHit) 1.dp else 0.5.dp,
+                        if (watch.isTargetHit) ext.success else ext.hairline
                     ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -268,7 +270,7 @@ fun RadarLiveScreen(
                                     onClick = { openSafeExternalUrl(context, watch.url) },
                                     modifier = Modifier.minimumInteractiveComponentSize()
                                 ) {
-                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open product page")
+                                    Icon(WorthItIcons.ArrowUpRight, contentDescription = "Open product page", modifier = Modifier.size(19.dp))
                                 }
                                 IconButton(
                                     onClick = { viewModel.deleteTrackedUrl(watch.id) },
@@ -324,9 +326,10 @@ fun RadarLiveScreen(
         } else {
             items(sourceStatuses, key = { it.sourceId }) { src ->
                 Card(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                    border = BorderStroke(0.5.dp, ext.hairline),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -391,9 +394,10 @@ fun RadarLiveScreen(
             val brandColor = Color(merchant.brandColorHex)
 
             Card(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                border = BorderStroke(0.5.dp, ext.hairline),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(

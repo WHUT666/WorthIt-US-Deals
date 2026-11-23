@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,20 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.LocalFireDepartment
-import androidx.compose.material.icons.outlined.Radar
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.AppThemeMode
+import com.example.ui.icons.WorthItBrandIconBadge
+import com.example.ui.icons.WorthItIcons
 import com.example.ui.screens.AlgorithmProfileScreen
 import com.example.ui.screens.DealDetailScreen
 import com.example.ui.screens.FeedScreen
@@ -73,11 +64,11 @@ enum class MainAppTab(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    FEED("Deals", Icons.Filled.LocalFireDepartment, Icons.Outlined.LocalFireDepartment),
-    COMPARE_SEARCH("Search", Icons.Filled.Search, Icons.Outlined.Search),
-    RADAR("Radar", Icons.Filled.Radar, Icons.Outlined.Radar),
-    SAVED("Saved", Icons.Filled.Bookmark, Icons.Outlined.BookmarkBorder),
-    ALGORITHM("Engine", Icons.Filled.Tune, Icons.Outlined.Tune)
+    FEED("Deals", WorthItIcons.DealsFilled, WorthItIcons.DealsOutlined),
+    COMPARE_SEARCH("Search", WorthItIcons.SearchFilled, WorthItIcons.SearchOutlined),
+    RADAR("Radar", WorthItIcons.RadarFilled, WorthItIcons.RadarOutlined),
+    SAVED("Saved", WorthItIcons.BookmarkFilled, WorthItIcons.BookmarkOutlined),
+    ALGORITHM("Engine", WorthItIcons.SlidersFilled, WorthItIcons.SlidersOutlined)
 }
 
 class MainActivity : ComponentActivity() {
@@ -149,13 +140,8 @@ fun MainAppScaffold(
                         ),
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Filled.LocalFireDepartment,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(23.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                WorthItBrandIconBadge(size = 28.dp)
+                                Spacer(modifier = Modifier.width(9.dp))
                                 Text(
                                     text = "WorthIt",
                                     style = MaterialTheme.typography.titleLarge,
@@ -178,28 +164,47 @@ fun MainAppScaffold(
                             }
                         },
                         actions = {
-                            IconButton(
-                                onClick = { viewModel.toggleLightDarkTheme(isDarkTheme) },
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("theme_toggle_btn")
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = CircleShape,
+                                border = BorderStroke(0.5.dp, ext.hairline),
+                                modifier = Modifier.padding(end = 6.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                                    contentDescription = if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                IconButton(
+                                    onClick = { viewModel.toggleLightDarkTheme(isDarkTheme) },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("theme_toggle_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isDarkTheme) WorthItIcons.SunMode else WorthItIcons.MoonMode,
+                                        contentDescription = if (isDarkTheme) "Switch to Light Theme" else "Switch to Dark Theme",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
                             }
-                            IconButton(
-                                onClick = { currentTab = MainAppTab.ALGORITHM },
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("app_bar_tune_btn")
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = CircleShape,
+                                border = BorderStroke(0.5.dp, ext.hairline),
+                                modifier = Modifier.padding(end = 10.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Tune,
-                                    contentDescription = "Open Push Engine settings"
-                                )
+                                IconButton(
+                                    onClick = { currentTab = MainAppTab.ALGORITHM },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("app_bar_tune_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = WorthItIcons.SlidersOutlined,
+                                        contentDescription = "Open Push Engine settings",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
                             }
                         }
                     )
@@ -229,7 +234,8 @@ fun MainAppScaffold(
                                 icon = {
                                     Icon(
                                         imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = tab.title
+                                        contentDescription = tab.title,
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 },
                                 label = { Text(tab.title, maxLines = 1) },
